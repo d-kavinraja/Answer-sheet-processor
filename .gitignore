@@ -1,0 +1,17 @@
+# Ignore model files (too large for GitHub)
+weights.pt
+best_crnn_model(git).pth
+best_subject_model_final.pth
+
+# Ignore temporary directories
+cropped_register_numbers/
+cropped_subject_codes/
+results/
+uploaded_image.png
+
+# Python and environment files
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
