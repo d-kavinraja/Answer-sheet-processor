@@ -184,9 +184,9 @@ def main():
     with st.spinner("Loading models..."):
         try:
             extractor = AnswerSheetExtractor(
-                "weights.pt",
-                "best_crnn_model(git).pth",
-                "best_subject_model_final.pth"
+                "improved_weights.pt",
+                "best_crnn_model.pth.pth",
+                "best_subject_code_model.pth"
             )
             st.success("Models loaded successfully")
         except Exception as e:
