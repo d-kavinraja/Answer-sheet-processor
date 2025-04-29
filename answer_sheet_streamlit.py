@@ -185,7 +185,7 @@ def main():
         try:
             extractor = AnswerSheetExtractor(
                 "improved_weights.pt",
-                "best_crnn_model.pth.pth",
+                "best_crnn_model.pth",
                 "best_subject_code_model.pth"
             )
             st.success("Models loaded successfully")
