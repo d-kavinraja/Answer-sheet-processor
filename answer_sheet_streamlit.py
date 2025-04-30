@@ -1246,7 +1246,6 @@ def main():
     # st.markdown("<p><a href='#' target='_blank'>Documentation</a> | <a href='#' target='_blank'>GitHub</a></p>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
-
 # --- Entry Point ---
 if __name__ == "__main__":
     main()
