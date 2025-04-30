@@ -6,3 +6,7 @@ opencv-python-headless
 pillow
 numpy
 requests
+streamlit_option_menu
+streamlit_lottie
+streamlit_webrtc
+streamlit_image_comparison
