@@ -223,7 +223,6 @@ def local_css():
     """, unsafe_allow_html=True)
 
 local_css()
-
 # Initialize session state
 if 'image_path' not in st.session_state:
     st.session_state.image_path = None
