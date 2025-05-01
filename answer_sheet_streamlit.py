@@ -41,7 +41,7 @@ def local_css():
 
         /* Button styling */
         .stButton>button {
-            font-weight: bold;
+            font-weight: 500;
             border-radius: 10px;
             padding: 0.75rem 1.5rem;
             transition: all 0.3s;
@@ -306,12 +306,13 @@ class CRNN(nn.Module):
 def load_extractor():
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
-        yolo_path = os.path.join(script_dir, "improved_weights.pt")
+        yolo_improved_path = os.path.join(script_dir, "improved_weights.pt")
+        yolo_fallback_path = os.path.join(script_dir, "weights.pt")
         register_crnn_path = os.path.join(script_dir, "best_crnn_model.pth")
         subject_crnn_path = os.path.join(script_dir, "best_subject_code_model.pth")
 
         # Check for model files and create dummy files if missing (for testing)
-        for p in [yolo_path, register_crnn_path, subject_crnn_path]:
+        for p in [yolo_improved_path, yolo_fallback_path, register_crnn_path, subject_crnn_path]:
             if not os.path.exists(p):
                 st.warning(f"Model file {p} not found. Creating dummy file for testing. Replace with actual model weights for production use!")
                 if p.endswith('.pt'):
@@ -330,19 +331,20 @@ def load_extractor():
                         open(p, 'a').close()
 
         extractor = AnswerSheetExtractor(
-            yolo_path,
+            yolo_improved_path,
+            yolo_fallback_path,
             register_crnn_path,
             subject_crnn_path
         )
         return extractor
     except Exception as e:
         st.error(f"Failed to initialize extractor: {e}")
-        st.info("Ensure model files (improved_weights.pt, best_crnn_model.pth, best_subject_code_model.pth) are in the script's directory.")
+        st.info("Ensure model files (improved_weights.pt, weights.pt, best_crnn_model.pth, best_subject_code_model.pth) are in the script's directory.")
         return None
 
 # AnswerSheetExtractor class
 class AnswerSheetExtractor:
-    def __init__(self, yolo_weights_path, register_crnn_model_path, subject_crnn_model_path):
+    def __init__(self, yolo_improved_weights_path, yolo_fallback_weights_path, register_crnn_model_path, subject_crnn_model_path):
         script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
         for dir_name in ["cropped_register_numbers", "cropped_subject_codes", "results", "uploads", "captures"]:
             os.makedirs(os.path.join(script_dir, dir_name), exist_ok=True)
@@ -360,14 +362,18 @@ class AnswerSheetExtractor:
             st.warning(f"Error checking CUDA availability: {e}. Falling back to CPU.")
             self.device = torch.device('cpu')
 
-        # Load YOLO model
-        if not os.path.exists(yolo_weights_path):
-            raise FileNotFoundError(f"YOLO weights not found at: {yolo_weights_path}")
+        # Load YOLO models
+        if not os.path.exists(yolo_improved_weights_path):
+            raise FileNotFoundError(f"Improved YOLO weights not found at: {yolo_improved_weights_path}")
+        if not os.path.exists(yolo_fallback_weights_path):
+            raise FileNotFoundError(f"Fallback YOLO weights not found at: {yolo_fallback_weights_path}")
         try:
-            self.yolo_model = YOLO(yolo_weights_path)
-            self.yolo_model.to(self.device)
+            self.yolo_improved_model = YOLO(yolo_improved_weights_path)
+            self.yolo_improved_model.to(self.device)
+            self.yolo_fallback_model = YOLO(yolo_fallback_weights_path)
+            self.yolo_fallback_model.to(self.device)
         except Exception as e:
-            raise RuntimeError(f"Failed to load YOLO model: {e}")
+            raise RuntimeError(f"Failed to load YOLO models: {e}")
 
         # Load Register CRNN model
         self.register_crnn_model = CRNN(num_classes=11)
@@ -409,16 +415,16 @@ class AnswerSheetExtractor:
         self.register_char_map = {0: '', **{i: str(i-1) for i in range(1, 11)}}
         self.subject_char_map = {0: '', **{i: str(i-1) for i in range(1, 11)}, **{i: chr(i - 11 + ord('A')) for i in range(11, 37)}}
 
-    def detect_regions(self, image_path):
+    def detect_regions(self, image_path, model, model_name):
         image = cv2.imread(image_path)
         if image is None:
             st.error(f"Could not load image from {image_path}")
             return [], [], None
 
         try:
-            results = self.yolo_model(image)
+            results = model(image)
         except Exception as e:
-            st.error(f"YOLO detection error: {e}")
+            st.error(f"YOLO detection error with {model_name}: {e}")
             return [], [], None
 
         detections = results[0].boxes
@@ -449,16 +455,41 @@ class AnswerSheetExtractor:
             padded_x2, padded_y2 = min(w, x2 + padding), min(h, y2 + padding)
             cropped_region = image[padded_y1:padded_y2, padded_x1:padded_x2]
             save_dir = os.path.join(self.script_dir, "cropped_register_numbers" if label == "RegisterNumber" else "cropped_subject_codes")
-            save_path = os.path.join(save_dir, f"{label.lower()}_{uuid.uuid4().hex}.jpg")
+            save_path = os.path.join(save_dir, f"{label.lower()}_{model_name}_{uuid.uuid4().hex}.jpg")
             cv2.imwrite(save_path, cropped_region)
             if label == "RegisterNumber" and confidence > 0.2:
                 register_regions.append((save_path, confidence))
             elif label == "SubjectCode" and confidence > 0.2:
                 subject_regions.append((save_path, confidence))
 
-        overlay_path = os.path.join(self.script_dir, "results", f"detection_overlay_{uuid.uuid4().hex}.jpg")
+        overlay_path = os.path.join(self.script_dir, "results", f"detection_overlay_{model_name}_{uuid.uuid4().hex}.jpg")
         cv2.imwrite(overlay_path, overlay)
         return register_regions, subject_regions, overlay_path
+
+    def select_best_detections(self, improved_results, fallback_results):
+        improved_registers, improved_subjects, improved_overlay = improved_results
+        fallback_registers, fallback_subjects, fallback_overlay = fallback_results
+
+        # Initialize best selections
+        best_register = None
+        best_subject = None
+        best_overlay = improved_overlay  # Default to improved model's overlay
+
+        # Select best register number
+        if improved_registers:
+            best_register = max(improved_registers, key=lambda x: x[1])
+        if fallback_registers and (not best_register or best_register[1] < max(fallback_registers, key=lambda x: x[1])[1]):
+            best_register = max(fallback_registers, key=lambda x: x[1])
+            best_overlay = fallback_overlay
+
+        # Select best subject code
+        if improved_subjects:
+            best_subject = max(improved_subjects, key=lambda x: x[1])
+        if fallback_subjects and (not best_subject or best_subject[1] < max(fallback_subjects, key=lambda x: x[1])[1]):
+            best_subject = max(fallback_subjects, key=lambda x: x[1])
+            best_overlay = fallback_overlay
+
+        return best_register, best_subject, best_overlay
 
     def extract_text(self, image_path, model, img_transform, char_map):
         try:
@@ -490,39 +521,49 @@ class AnswerSheetExtractor:
 
     def process_answer_sheet(self, image_path):
         st.session_state.processing_start_time = time.time()
-        with st.spinner("Detecting regions..."):
-            register_regions, subject_regions, overlay_path = self.detect_regions(image_path)
+
+        # Step 1: Try improved model
+        with st.spinner("Detecting regions with improved model..."):
+            improved_results = self.detect_regions(image_path, self.yolo_improved_model, "improved")
+            improved_registers, improved_subjects, improved_overlay = improved_results
+
+        # Step 2: If either register or subject is not detected, try fallback model
+        if not (improved_registers and improved_subjects):
+            with st.spinner("Detecting regions with fallback model..."):
+                fallback_results = self.detect_regions(image_path, self.yolo_fallback_model, "fallback")
+        else:
+            fallback_results = ([], [], None)  # No need for fallback if both detected
+
+        # Step 3: Select best detections
+        best_register, best_subject, best_overlay = self.select_best_detections(improved_results, fallback_results)
 
         results = []
-        best_register_cropped_path = None
-        best_subject_cropped_path = None
+        best_register_cropped_path = best_register[0] if best_register else None
+        best_subject_cropped_path = best_subject[0] if best_subject else None
 
-        if register_regions:
-            best_region = max(register_regions, key=lambda x: x[1])
-            best_register_cropped_path = best_region[0]
+        # Step 4: Proceed with extraction for the best detections
+        if best_register:
             with st.spinner("Extracting Register Number..."):
                 register_number = self.extract_register_number(best_register_cropped_path)
             results.append(("Register Number", register_number))
-            st_success(f"Register Number detected (Confidence: {best_region[1]:.2f}). Extracted: '{register_number}'")
+            st_success(f"Register Number detected (Confidence: {best_register[1]:.2f}). Extracted: '{register_number}'")
         else:
-            st_warning("No RegisterNumber regions detected.")
+            st_warning("No RegisterNumber regions detected with either model.")
 
-        if subject_regions:
-            best_subject = max(subject_regions, key=lambda x: x[1])
-            best_subject_cropped_path = best_subject[0]
+        if best_subject:
             with st.spinner("Extracting Subject Code..."):
                 subject_code = self.extract_subject_code(best_subject_cropped_path)
             results.append(("Subject Code", subject_code))
             st_success(f"Subject Code detected (Confidence: {best_subject[1]:.2f}). Extracted: '{subject_code}'")
         else:
-            st_warning("No SubjectCode regions detected.")
+            st_warning("No SubjectCode regions detected with either model.")
 
         processing_time = time.time() - st.session_state.processing_start_time
-        if results or overlay_path:
+        if results or best_overlay:
             history_item = {
                 "timestamp": datetime.now().strftime("%Y-%m-d %H:%M:%S"),
                 "original_image_path": image_path,
-                "overlay_image_path": overlay_path,
+                "overlay_image_path": best_overlay,
                 "register_cropped_path": best_register_cropped_path,
                 "subject_cropped_path": best_subject_cropped_path,
                 "results": results,
@@ -530,7 +571,7 @@ class AnswerSheetExtractor:
             }
             st.session_state.results_history.insert(0, history_item)
 
-        return results, best_register_cropped_path, best_subject_cropped_path, overlay_path, processing_time
+        return results, best_register_cropped_path, best_subject_cropped_path, best_overlay, processing_time
 
 # WebRTC configuration
 RTC_CONFIGURATION = RTCConfiguration(
@@ -609,7 +650,7 @@ def get_image_download_button(image_path, filename, button_text):
                     key=f"download_{filename.replace('.', '_')}_{uuid.uuid4().hex}"
                 )
         except Exception as e:
-            st_error(f"Failed to create download button for {filename}: {e}")
+            st_error(f"Failed to create download button качестве {filename}: {e}")
     return None
 
 # Save results helper
@@ -633,7 +674,7 @@ def main():
     display_header()
 
     script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
-    model_files = ["improved_weights.pt", "best_crnn_model.pth", "best_subject_code_model.pth"]
+    model_files = ["improved_weights.pt", "weights.pt", "best_crnn_model.pth", "best_subject_code_model.pth"]
     model_paths = [os.path.join(script_dir, f) for f in model_files]
 
     with st.spinner("Loading models..."):
@@ -892,7 +933,7 @@ def main():
                         <p><strong>Results:</strong> {results_summary}</p>
                         <p><strong>Processing Time:</strong> {processing_time:.2f} sec</p>
                     </div>
-                    """, unsafe_allow_html=True)
+                    """, untrue_allow_html=True)
                 with hist_cols[1]:
                     if st.button("View Details", key=f"view_history_{i}"):
                         st.session_state.selected_history_item_index = i
@@ -1002,7 +1043,7 @@ def main():
         st.markdown("<h6>Model Information:</h6>", unsafe_allow_html=True)
         st.markdown("""
         <ul>
-            <li>The models require specific weights files (<code>improved_weights.pt</code>, <code>best_crnn_model.pth</code>, <code>best_subject_code_model.pth</code>) to be present in the same directory as the script.</li>
+            <li>The models require specific weights files (<code>improved_weights.pt</code>, <code>weights.pt</code>, <code>best_crnn_model.pth</code>, <code>best_subject_code_model.pth</code>) to be present in the same directory as the script.</li>
             <li>Accuracy is dependent on the quality of the input image (clarity, lighting, angle) and the training data used for the models.</li>
             <li>If model files are missing, dummy files are created for testing. Replace them with trained model weights for production use.</li>
         </ul>
