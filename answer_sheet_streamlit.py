@@ -254,8 +254,6 @@ if 'webrtc_key' not in st.session_state:
     st.session_state.webrtc_key = f"webrtc_{uuid.uuid4().hex}"
 if 'input_method' not in st.session_state:
     st.session_state.input_method = "Upload Image"
-if 'camera_device' not in st.session_state:
-    st.session_state.camera_device = "default"
 
 # Define CRNN model
 class CRNN(nn.Module):
@@ -522,7 +520,7 @@ class AnswerSheetExtractor:
         processing_time = time.time() - st.session_state.processing_start_time
         if results or overlay_path:
             history_item = {
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": datetime.now().strftime("%Y-%m-d %H:%M:%S"),
                 "original_image_path": image_path,
                 "overlay_image_path": overlay_path,
                 "register_cropped_path": best_register_cropped_path,
@@ -535,26 +533,13 @@ class AnswerSheetExtractor:
         return results, best_register_cropped_path, best_subject_cropped_path, overlay_path, processing_time
 
 # WebRTC configuration
-from streamlit_webrtc import webrtc_streamer, RTCConfiguration, WebRtcMode
-# ... other imports (streamlit, cv2, ultralytics, torch, etc.) remain unchanged ...
-
-# Define ICE server configuration with STUN servers
-RTC_CONFIG = RTCConfiguration(
-    {
-        "iceServers": [
-            {"urls": "stun:stun.l.google.com:19302"},
-            {"urls": "stun:stun1.l.google.com:19302"},
-            {"urls": "stun:stun2.l.google.com:19302"},
-            # Add TURN server if needed (example, requires credentials)
-            # {
-            #     "urls": "turn:turn.example.com:3478",
-            #     "username": "your_username",
-            #     "credential": "your_password"
-            # }
-        ],
-        "iceTransportPolicy": "all",  # Try all candidates (host, srflx, relay)
-    }
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [
+        {"urls": ["stun:stun.l.google.com:19302"]},
+        {"urls": ["stun:stun1.l.google.com:19302"]}
+    ]}
 )
+
 # Video processor class
 class VideoProcessor:
     def __init__(self):
@@ -567,11 +552,8 @@ class VideoProcessor:
 
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
         current_time = time.time()
-        if current_time - self.last_processed < self.process_interval:
-            return av.VideoFrame.from_ndarray(self.frame, format="bgr24") if self.frame is not None else frame
-
         img = frame.to_ndarray(format="bgr24")
-        self.frame = img
+        self.frame = img  # Always update frame to ensure it's not None
         self.last_processed = current_time
         self.frame_count += 1
         if current_time - self.last_frame_time >= 1.0:
@@ -752,20 +734,6 @@ def main():
                     st.markdown("<h4>📸 Live Camera Feed</h4>", unsafe_allow_html=True)
                     st_info("Position the answer sheet within the frame and click 'Capture Image'.")
 
-                    # Camera device selection
-                    camera_options = ["default", "user", "environment"]
-                    camera_labels = ["Default Camera", "Front Camera (User)", "Back Camera (Environment)"]
-                    camera_selection = st.selectbox(
-                        "Select Camera",
-                        options=camera_options,
-                        format_func=lambda x: camera_labels[camera_options.index(x)],
-                        key="camera_select"
-                    )
-                    if camera_selection != st.session_state.camera_device:
-                        st.session_state.camera_device = camera_selection
-                        st.session_state.webrtc_key = f"webrtc_{uuid.uuid4().hex}"
-                        st.rerun()
-
                     media_constraints = {
                         "video": {
                             "width": {"ideal": 1280},
@@ -774,47 +742,39 @@ def main():
                         },
                         "audio": False
                     }
-                    if camera_selection != "default":
-                        media_constraints["video"]["facingMode"] = camera_selection
 
                     ctx = webrtc_streamer(
-                        key="camera",
+                        key=st.session_state.webrtc_key,
                         mode=WebRtcMode.SENDRECV,
-                        rtc_configuration=RTC_CONFIG,
+                        rtc_configuration=RTC_CONFIGURATION,
+                        media_stream_constraints=media_constraints,
                         video_processor_factory=VideoProcessor,
-                        media_stream_constraints={
-                            "video": {"facingMode": {"ideal": "environment"}},  # Prefer rear camera
-                            "audio": False,
-                        },
-                        async_processing=True,  # Enable async for smoother processing
+                        async_processing=True
                     )
 
                     st.markdown('<div class="camera-controls">', unsafe_allow_html=True)
-                    capture_btn_disabled = not (ctx.state.playing and ctx.video_processor and hasattr(ctx.video_processor, 'frame') and ctx.video_processor.frame is not None)
+                    capture_btn_disabled = not (ctx.state.playing and ctx.video_processor)
                     if st.button("📸 Capture Image", key="capture_btn", disabled=capture_btn_disabled):
-                        if not capture_btn_disabled:
+                        if ctx.video_processor and hasattr(ctx.video_processor, 'frame') and ctx.video_processor.frame is not None:
                             frame_to_save = ctx.video_processor.frame
-                            if frame_to_save is not None:
-                                captures_dir = os.path.join(script_dir, "captures")
-                                os.makedirs(captures_dir, exist_ok=True)
-                                temp_path = os.path.join(captures_dir, f"image_{uuid.uuid4().hex}.jpg")
-                                try:
-                                    cv2.imwrite(temp_path, frame_to_save)
-                                    if not os.path.exists(temp_path):
-                                        raise IOError("Failed to save captured image file.")
-                                    st.session_state.image_path = temp_path
-                                    st.session_state.image_captured = True
-                                    st.session_state.selected_history_item_index = None
-                                    st_success("Image captured successfully!")
-                                    st.rerun()
-                                except Exception as e:
-                                    st_error(f"Error saving captured image: {e}")
-                                    st.session_state.image_path = None
-                                    st.session_state.image_captured = False
-                            else:
-                                st_warning("Could not get frame from camera. Try again.")
+                            captures_dir = os.path.join(script_dir, "captures")
+                            os.makedirs(captures_dir, exist_ok=True)
+                            temp_path = os.path.join(captures_dir, f"image_{uuid.uuid4().hex}.jpg")
+                            try:
+                                cv2.imwrite(temp_path, frame_to_save)
+                                if not os.path.exists(temp_path):
+                                    raise IOError("Failed to save captured image file.")
+                                st.session_state.image_path = temp_path
+                                st.session_state.image_captured = True
+                                st.session_state.selected_history_item_index = None
+                                st_success("Image captured successfully!")
+                                st.rerun()
+                            except Exception as e:
+                                st_error(f"Error saving captured image: {e}")
+                                st.session_state.image_path = None
+                                st.session_state.image_captured = False
                         else:
-                            st_warning("Camera not ready. Please wait for the feed to start.")
+                            st_warning("No frame available yet. Please wait a moment and try again.")
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 elif st.session_state.image_path and os.path.exists(st.session_state.image_path):
@@ -899,7 +859,7 @@ def main():
                             st.markdown('<div class="image-container">', unsafe_allow_html=True)
                             st.image(subject_cropped, caption="Subject Code", use_container_width=True)
                             st.markdown('</div>', unsafe_allow_html=True)
-                            get_image_download_button(subject_cropped, "subject_code_crop.jpg", "Download Subject Crop")
+                            get_image_download_button(subject_cropped, 'subject_code_crop.jpg', 'Download Subject Crop')
                         if not register_cropped and not subject_cropped:
                             st_info("No regions cropped.")
                 except Exception as e:
@@ -1031,7 +991,7 @@ def main():
             <li>Navigate to the <b>Scan</b> tab.</li>
             <li>Choose your input method: <b>Upload Image</b> or <b>Use Camera</b>.</li>
             <li>If uploading, select a clear image of the answer sheet.</li>
-            <li>If using the camera, select the desired camera, position the sheet clearly, and click <b>Capture Image</b>.</li>
+            <li>If using the camera, position the sheet clearly and click <b>Capture Image</b>.</li>
             <li>Once an image is loaded or captured, click <b>Extract Information</b>.</li>
             <li>View the extracted text, detection overlays, and cropped regions.</li>
             <li>Check the <b>History</b> tab to review past scans.</li>
