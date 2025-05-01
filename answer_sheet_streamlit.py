@@ -1002,7 +1002,7 @@ def main():
             <p>This application leverages computer vision models to automatically detect and extract Register Numbers and Subject Codes from scanned or photographed answer sheets.</p>
             <h6>Key Technologies Used:</h6>
             <ul>
-                <li><b>Object Detection:</b> A custom-trained YOLOv8 model identifies the locations of the relevant fields (Register Number, Subject Code) on the sheet.</li>
+                <li><b>Object Detection:</b> A custom-trained YOLOv11 model identifies the locations of the relevant fields (Register Number, Subject Code) on the sheet.</li>
                 <li><b>Text Recognition (OCR):</b> Convolutional Recurrent Neural Network (CRNN) models are employed to read the characters within the detected regions. Separate CRNN models are optimized for recognizing digits (Register Number) and alphanumeric characters (Subject Code).</li>
                 <li><b>Web Interface:</b> Built with Streamlit, providing an interactive user interface for image upload, camera capture, and results visualization.</li>
             </ul>
