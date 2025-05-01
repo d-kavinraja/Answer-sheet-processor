@@ -1557,7 +1557,7 @@ def main():
             <li>The models require specific weights files (<code>improved_weights.pt</code>, <code>best_crnn_model.pth</code>, <code>best_subject_code_model.pth</code>) to be present in the same directory as the script.</li>
             <li><code>weights.pt</code> is optional; the app will use <code>improved_weights.pt</code> if <code>weights.pt</code> is missing.</li>
             <li>Accuracy is dependent on the quality of the input image (clarity, lighting, angle) and the training data used for the models.</li>
-            <li>If CRNN model files are missing, dummy files are created for testing. Replace them with trained model weights for production use.</li>
+            <li>If CRNN model files are missing, dummy files are created for testing. Replace them with trained model weights for production use..</li>
         </ul>
         """, unsafe_allow_html=True)
 
