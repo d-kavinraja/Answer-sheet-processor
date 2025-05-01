@@ -300,7 +300,6 @@ class CRNN(nn.Module):
         x = self.dropout(x)
         x = self.fc(x)
         return x
-
 # Cache model loading
 @st.cache_resource
 def load_extractor():
