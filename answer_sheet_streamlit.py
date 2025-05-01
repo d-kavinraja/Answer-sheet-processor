@@ -535,13 +535,26 @@ class AnswerSheetExtractor:
         return results, best_register_cropped_path, best_subject_cropped_path, overlay_path, processing_time
 
 # WebRTC configuration
-RTC_CONFIGURATION = RTCConfiguration(
-    {"iceServers": [
-        {"urls": ["stun:stun.l.google.com:19302"]},
-        {"urls": ["stun:stun1.l.google.com:19302"]}
-    ]}
-)
+from streamlit_webrtc import webrtc_streamer, RTCConfiguration, WebRtcMode
+# ... other imports (streamlit, cv2, ultralytics, torch, etc.) remain unchanged ...
 
+# Define ICE server configuration with STUN servers
+RTC_CONFIG = RTCConfiguration(
+    {
+        "iceServers": [
+            {"urls": "stun:stun.l.google.com:19302"},
+            {"urls": "stun:stun1.l.google.com:19302"},
+            {"urls": "stun:stun2.l.google.com:19302"},
+            # Add TURN server if needed (example, requires credentials)
+            # {
+            #     "urls": "turn:turn.example.com:3478",
+            #     "username": "your_username",
+            #     "credential": "your_password"
+            # }
+        ],
+        "iceTransportPolicy": "all",  # Try all candidates (host, srflx, relay)
+    }
+)
 # Video processor class
 class VideoProcessor:
     def __init__(self):
@@ -765,13 +778,17 @@ def main():
                         media_constraints["video"]["facingMode"] = camera_selection
 
                     ctx = webrtc_streamer(
-                        key=st.session_state.webrtc_key,
+                        key="camera",
                         mode=WebRtcMode.SENDRECV,
-                        rtc_configuration=RTC_CONFIGURATION,
-                        media_stream_constraints=media_constraints,
+                        rtc_configuration=RTC_CONFIG,
                         video_processor_factory=VideoProcessor,
-                        async_processing=True
+                        media_stream_constraints={
+                            "video": {"facingMode": {"ideal": "environment"}},  # Prefer rear camera
+                            "audio": False,
+                        },
+                        async_processing=True,  # Enable async for smoother processing
                     )
+
 
                     st.markdown('<div class="camera-controls">', unsafe_allow_html=True)
                     capture_btn_disabled = not (ctx.state.playing and ctx.video_processor and hasattr(ctx.video_processor, 'frame') and ctx.video_processor.frame is not None)
