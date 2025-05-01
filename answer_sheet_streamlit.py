@@ -789,7 +789,6 @@ def main():
                         async_processing=True,  # Enable async for smoother processing
                     )
 
-
                     st.markdown('<div class="camera-controls">', unsafe_allow_html=True)
                     capture_btn_disabled = not (ctx.state.playing and ctx.video_processor and hasattr(ctx.video_processor, 'frame') and ctx.video_processor.frame is not None)
                     if st.button("📸 Capture Image", key="capture_btn", disabled=capture_btn_disabled):
