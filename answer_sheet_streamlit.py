@@ -271,7 +271,7 @@ class CRNN(nn.Module):
         x = self.fc(x)
         return x
 
-# AnswerSheetExtractor class (updated with second code's logic)
+# AnswerSheetExtractor class
 class AnswerSheetExtractor:
     def __init__(self, primary_yolo_weights_path, fallback_yolo_weights_path, register_crnn_model_path, subject_crnn_model_path):
         script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
@@ -300,7 +300,11 @@ class AnswerSheetExtractor:
         checkpoint = torch.load(register_crnn_model_path, map_location=self.device)
         state_dict = checkpoint.get('model_state_dict', checkpoint)
         new_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
-        self.register_crnn_model.load_state_dict(new_state_dict)
+        try:
+            self.register_crnn_model.load_state_dict(new_state_dict)
+        except RuntimeError as e:
+            st.error(f"Failed to load register CRNN model: {e}")
+            raise
         self.register_crnn_model.eval()
 
         # Load Subject CRNN model
@@ -310,7 +314,11 @@ class AnswerSheetExtractor:
         checkpoint = torch.load(subject_crnn_model_path, map_location=self.device)
         state_dict = checkpoint.get('model_state_dict', checkpoint)
         new_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
-        self.subject_crnn_model.load_state_dict(new_state_dict)
+        try:
+            self.subject_crnn_model.load_state_dict(new_state_dict)
+        except RuntimeError as e:
+            st.error(f"Failed to load subject CRNN model: {e}")
+            raise
         self.subject_crnn_model.eval()
 
         self.register_transform = transforms.Compose([
@@ -586,18 +594,24 @@ def load_extractor():
         script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
         yolo_improved_path = os.path.join(script_dir, "improved_weights.pt")
         yolo_fallback_path = os.path.join(script_dir, "weights.pt")
-        register_crnn_path = os.path.join(script_dir, "best_crnn_model(git).pth")
-        subject_crnn_path = os.path.join(script_dir, "best_subject_code_model.pth")
+        # Swapped paths to match the error (assuming best_crnn_model(git).pth is for subject code)
+        register_crnn_path = os.path.join(script_dir, "best_subject_code_model.pth")
+        subject_crnn_path = os.path.join(script_dir, "best_crnn_model(git).pth")
 
         # Check for model files and create dummy files if missing
-        for p in [yolo_improved_path, yolo_fallback_path, register_crnn_path, subject_crnn_path]:
+        for p, num_classes in [
+            (yolo_improved_path, None),
+            (yolo_fallback_path, None),
+            (register_crnn_path, 11),
+            (subject_crnn_path, 37)
+        ]:
             if not os.path.exists(p):
                 st.warning(f"Model file {p} not found. Creating dummy file for testing.")
                 if p.endswith('.pt'):
                     dummy_state = {'model': torch.nn.Module()}
                     torch.save(dummy_state, p)
                 elif p.endswith('.pth'):
-                    dummy_model = CRNN(num_classes=11 if 'register' in p else 37)
+                    dummy_model = CRNN(num_classes=num_classes)
                     torch.save({'model_state_dict': dummy_model.state_dict()}, p)
 
         extractor = AnswerSheetExtractor(
@@ -873,7 +887,8 @@ def main():
 
     elif selected_tab == "History":
         st.markdown('<div class="tab-content">', unsafe_allow_html=True)
-        st.subheader("📜 Processing History!!!")
+        st.subheader("📜 Processing History")
+
         if not st.session_state.results_history:
             st_info("No processing history yet. Scan an answer sheet on the 'Scan' tab to populate history.")
         else:
