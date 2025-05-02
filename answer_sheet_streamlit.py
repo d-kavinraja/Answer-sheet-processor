@@ -1008,7 +1008,7 @@ def main():
 
     st.markdown('<div class="footer">', unsafe_allow_html=True)
     st.markdown('<div class="footer-content">', unsafe_allow_html=True)
-    st.markdown("<p>© 2025 Smart Scanner Project. Built with Streamlit.</p>", unsafe_allow_html=True)
+    st.markdown("<p>© 2025 Smart Scanner Project !!!. Built with Streamlit.</p>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
