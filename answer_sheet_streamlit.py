@@ -309,7 +309,7 @@ def load_extractor():
         yolo_improved_path = os.path.join(script_dir, "improved_weights.pt")
         yolo_fallback_path = os.path.join(script_dir, "weights.pt")
         register_crnn_path = os.path.join(script_dir, "best_crnn_model.pth")
-        subject_crnn_path = os.path.join(script_dir, "best_subject_code_model_fulldataset.pth")
+        subject_crnn_path = os.path.join(script_dir, "best_subject_code_model.pth")
 
         # Check for model files
         missing_files = []
@@ -321,7 +321,7 @@ def load_extractor():
             st.error(f"Required model files missing: {', '.join(missing_files)}")
             st.info("""
             To deploy on Streamlit Community Cloud:
-            1. Ensure all model files (improved_weights.pt, best_crnn_model.pth, best_subject_code_model_fulldataset.pth) are in your GitHub repository's root directory.
+            1. Ensure all model files (improved_weights.pt, best_crnn_model.pth, best_subject_code_model.pth) are in your GitHub repository's root directory.
             2. Verify that the file paths in the code match the repository structure.
             3. If weights.pt is unavailable, the app will use improved_weights.pt only.
             4. Create a requirements.txt file with all dependencies (e.g., streamlit, torch, opencv-python, ultralytics, etc.).
@@ -351,7 +351,7 @@ def load_extractor():
         st.error(f"Failed to initialize extractor: {e}")
         st.info("""
         Ensure the following:
-        - Model files (improved_weights.pt, best_crnn_model.pth, best_subject_code_model_fulldataset.pth) are in the script's directory.
+        - Model files (improved_weights.pt, best_crnn_model.pth, best_subject_code_model.pth) are in the script's directory.
         - If weights.pt is unavailable, the app will proceed with improved_weights.pt only.
         - All dependencies are listed in requirements.txt.
         - The ultralytics library version is compatible with the YOLO model weights.
@@ -785,7 +785,7 @@ def load_extractor():
         yolo_improved_path = os.path.join(script_dir, "improved_weights.pt")
         yolo_fallback_path = os.path.join(script_dir, "weights.pt")
         register_crnn_path = os.path.join(script_dir, "best_crnn_model.pth")
-        subject_crnn_path = os.path.join(script_dir, "best_subject_code_model_fulldataset.pth")
+        subject_crnn_path = os.path.join(script_dir, "best_subject_code_model.pth")
 
         # Check for required model files
         required_files = [yolo_improved_path, register_crnn_path, subject_crnn_path]
@@ -794,7 +794,7 @@ def load_extractor():
             st.error(f"Required model files missing: {', '.join(missing_files)}")
             st.info("""
             To deploy on Streamlit Community Cloud:
-            1. Ensure all required model files (improved_weights.pt, best_crnn_model.pth, best_subject_code_model_fulldataset.pth) are in your GitHub repository's root directory.
+            1. Ensure all required model files (improved_weights.pt, best_crnn_model.pth, best_subject_code_model.pth) are in your GitHub repository's root directory.
             2. Verify that the file paths in the code match the repository structure.
             3. weights.pt is optional; the app will proceed with improved_weights.pt if weights.pt is missing.
             4. Create a requirements.txt file with all dependencies (e.g., streamlit, torch, opencv-python, ultralytics, etc.).
@@ -828,7 +828,7 @@ def load_extractor():
         st.error(f"Failed to initialize extractor: {e}")
         st.info("""
         Ensure the following:
-        - Required model files (improved_weights.pt, best_crnn_model.pth, best_subject_code_model_fulldataset.pth) are in the script's directory.
+        - Required model files (improved_weights.pt, best_crnn_model.pth, best_subject_code_model.pth) are in the script's directory.
         - If weights.pt is unavailable, the app will proceed with improved_weights.pt only.
         - All dependencies are listed in requirements.txt.
         - The ultralytics library version is compatible with the YOLO model weights.
@@ -1184,7 +1184,7 @@ def main():
     display_header()
 
     script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
-    model_files = ["improved_weights.pt", "best_crnn_model.pth", "best_subject_code_model_fulldataset.pth"]
+    model_files = ["improved_weights.pt", "best_crnn_model.pth", "best_subject_code_model.pth"]
     model_paths = [os.path.join(script_dir, f) for f in model_files]
 
     with st.spinner("Loading models..."):
@@ -1554,7 +1554,7 @@ def main():
         st.markdown("<h6>Model Information:</h6>", unsafe_allow_html=True)
         st.markdown("""
         <ul>
-            <li>The models require specific weights files (<code>improved_weights.pt</code>, <code>best_crnn_model.pth</code>, <code>best_subject_code_model_fulldataset.pth</code>) to be present in the same directory as the script.</li>
+            <li>The models require specific weights files (<code>improved_weights.pt</code>, <code>best_crnn_model.pth</code>, <code>best_subject_code_model.pth</code>) to be present in the same directory as the script.</li>
             <li><code>weights.pt</code> is optional; the app will use <code>improved_weights.pt</code> if <code>weights.pt</code> is missing.</li>
             <li>Accuracy is dependent on the quality of the input image (clarity, lighting, angle) and the training data used for the models.</li>
             <li>If CRNN model files are missing, dummy files are created for testing. Replace them with trained model weights for production use.</li>
