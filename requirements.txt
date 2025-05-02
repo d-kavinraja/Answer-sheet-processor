@@ -4,6 +4,7 @@ streamlit-image-comparison
 opencv-python-headless
 ultralytics
 torch
+pdf2image
 torchvision
 av
 numpy
