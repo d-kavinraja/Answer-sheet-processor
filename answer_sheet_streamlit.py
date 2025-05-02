@@ -15,8 +15,6 @@ from streamlit_option_menu import option_menu
 from streamlit_image_comparison import image_comparison
 from datetime import datetime
 import json
-from pdf2image import convert_from_path
-import tempfile
 
 # Set page configuration
 st.set_page_config(
@@ -26,17 +24,22 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for styling
+# Custom CSS for styling with theme compatibility and mobile-friendly buttons
 def local_css():
     st.markdown("""
     <style>
+        /* Theme compatibility: Use Streamlit theme variables */
         .stApp {
             max-width: 1200px;
             margin: 0 auto;
         }
+
+        /* Hide header button */
         [data-testid="stHeader"] button {
             display: none !important;
         }
+
+        /* Button styling */
         .stButton>button {
             font-weight: 500;
             border-radius: 10px;
@@ -50,6 +53,8 @@ def local_css():
             width: 100%;
             font-size: 1.1rem;
         }
+
+        /* Status boxes */
         .success-box {
             background-color: #d4edda;
             border-color: #c3e6cb;
@@ -82,6 +87,8 @@ def local_css():
             border-radius: 0.25rem;
             margin-bottom: 1rem;
         }
+
+        /* Result card */
         .result-card {
             background-color: var(--secondary-background-color);
             border-radius: 10px;
@@ -89,6 +96,8 @@ def local_css():
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             margin-bottom: 20px;
         }
+
+        /* Header container */
         .header-container {
             background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
             padding: 20px;
@@ -99,23 +108,30 @@ def local_css():
         .header-container h1, .header-container p {
             color: var(--text-color-inverse);
         }
+
+        /* Camera container */
         .camera-container {
             border: 2px dashed #ccc;
             border-radius: 10px;
             padding: 15px;
             background-color: var(--secondary-background-color);
         }
+
         .image-container {
             border-radius: 10px;
             overflow: hidden;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
+
+        /* Tab content */
         .tab-content {
             padding: 20px;
             border-radius: 0 0 10px 10px;
             background-color: var(--background-color);
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
+
+        /* History item */
         .history-item {
             padding: 15px;
             border-radius: 8px;
@@ -130,6 +146,8 @@ def local_css():
             transform: translateY(-2px);
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+
+        /* Footer */
         .footer {
             margin-top: 50px;
             padding: 20px;
@@ -157,6 +175,8 @@ def local_css():
             align-items: center;
             gap: 10px;
         }
+
+        /* Camera controls */
         .camera-controls {
             display: flex;
             justify-content: center;
@@ -167,9 +187,13 @@ def local_css():
             padding: 1rem 2rem;
             font-size: 1.2rem;
         }
+
+        /* Progress bar */
         .stProgress > div > div > div > div {
             background-color: var(--primary-color) !important;
         }
+
+        /* Input buttons column */
         .input-buttons-col {
             display: flex;
             flex-direction: column;
@@ -179,6 +203,8 @@ def local_css():
             margin-left: auto;
             margin-right: auto;
         }
+
+        /* Extracted output */
         .extracted-output {
             background-color: var(--secondary-background-color);
             border: 2px solid var(--primary-color);
@@ -188,11 +214,15 @@ def local_css():
             font-family: 'Courier New', Courier, monospace;
             color: var(--text-color);
         }
+
+        /* Image comparison width control */
         .image-comparison-container {
             width: 100%;
             max-width: 600px;
             margin: 0 auto;
         }
+
+        /* Mobile responsiveness */
         @media (max-width: 768px) {
             .footer { padding: 15px; font-size: 0.8rem; }
             .footer-content { flex-direction: column; gap: 8px; }
@@ -223,7 +253,7 @@ if 'selected_history_item_index' not in st.session_state:
 if 'webrtc_key' not in st.session_state:
     st.session_state.webrtc_key = f"webrtc_{uuid.uuid4().hex}"
 if 'input_method' not in st.session_state:
-    st.session_state.input_method = "Upload File"
+    st.session_state.input_method = "Upload Image"
 
 # Define CRNN model
 class CRNN(nn.Module):
@@ -271,54 +301,102 @@ class CRNN(nn.Module):
         x = self.fc(x)
         return x
 
+# Cache model loading
+@st.cache_resource
+def load_extractor():
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
+        yolo_improved_path = os.path.join(script_dir, "improved_weights.pt")
+        yolo_fallback_path = os.path.join(script_dir, "weights.pt")
+        register_crnn_path = os.path.join(script_dir, "best_crnn_model.pth")
+        subject_crnn_path = os.path.join(script_dir, "best_subject_code_model.pth")
+
+        # Check for model files and create dummy files if missing (for testing)
+        for p in [yolo_improved_path, yolo_fallback_path, register_crnn_path, subject_crnn_path]:
+            if not os.path.exists(p):
+                st.warning(f"Model file {p} not found. Creating dummy file for testing. Replace with actual model weights for production use!")
+                if p.endswith('.pt'):
+                    try:
+                        dummy_state = {'model': torch.nn.Module()}
+                        torch.save(dummy_state, p)
+                    except Exception as e:
+                        st.error(f"Failed to create dummy YOLO file {p}: {e}")
+                        open(p, 'a').close()
+                elif p.endswith('.pth'):
+                    try:
+                        dummy_model = CRNN(num_classes=11 if 'register' in p else 37)
+                        torch.save({'model_state_dict': dummy_model.state_dict()}, p)
+                    except Exception as e:
+                        st.error(f"Failed to create dummy CRNN file {p}: {e}")
+                        open(p, 'a').close()
+
+        extractor = AnswerSheetExtractor(
+            yolo_improved_path,
+            yolo_fallback_path,
+            register_crnn_path,
+            subject_crnn_path
+        )
+        return extractor
+    except Exception as e:
+        st.error(f"Failed to initialize extractor: {e}")
+        st.info("Ensure model files (improved_weights.pt, weights.pt, best_crnn_model.pth, best_subject_code_model.pth) are in the script's directory.")
+        return None
+
 # AnswerSheetExtractor class
 class AnswerSheetExtractor:
-    def __init__(self, primary_yolo_weights_path, fallback_yolo_weights_path, register_crnn_model_path, subject_crnn_model_path):
+    def __init__(self, yolo_improved_weights_path, yolo_fallback_weights_path, register_crnn_model_path, subject_crnn_model_path):
         script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
-        for dir_name in ["cropped_register_numbers", "cropped_subject_codes", "results", "uploads", "captures", "temp_uploads"]:
+        for dir_name in ["cropped_register_numbers", "cropped_subject_codes", "results", "uploads", "captures"]:
             os.makedirs(os.path.join(script_dir, dir_name), exist_ok=True)
         self.script_dir = script_dir
 
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        if torch.cuda.is_available():
-            st.info(f"Using CUDA device: {torch.cuda.get_device_name(0)}")
-        else:
-            st.info("Using CPU.")
+        # Robust device selection
+        try:
+            cuda_available = torch.cuda.is_available()
+            self.device = torch.device('cuda' if cuda_available else 'cpu')
+            if cuda_available:
+                st.info(f"Using CUDA device: {torch.cuda.get_device_name(0)}")
+            else:
+                st.info("CUDA not available. Using CPU.")
+        except Exception as e:
+            st.warning(f"Error checking CUDA availability: {e}. Falling back to CPU.")
+            self.device = torch.device('cpu')
 
         # Load YOLO models
-        if not os.path.exists(primary_yolo_weights_path):
-            raise FileNotFoundError(f"Primary YOLO weights not found at: {primary_yolo_weights_path}")
-        if not os.path.exists(fallback_yolo_weights_path):
-            raise FileNotFoundError(f"Fallback YOLO weights not found at: {fallback_yolo_weights_path}")
-        self.primary_yolo_model = YOLO(primary_yolo_weights_path).to(self.device)
-        self.fallback_yolo_model = YOLO(fallback_yolo_weights_path).to(self.device)
+        if not os.path.exists(yolo_improved_weights_path):
+            raise FileNotFoundError(f"Improved YOLO weights not found at: {yolo_improved_weights_path}")
+        if not os.path.exists(yolo_fallback_weights_path):
+            raise FileNotFoundError(f"Fallback YOLO weights not found at: {yolo_fallback_weights_path}")
+        try:
+            self.yolo_improved_model = YOLO(yolo_improved_weights_path)
+            self.yolo_improved_model.to(self.device)
+            self.yolo_fallback_model = YOLO(yolo_fallback_weights_path)
+            self.yolo_fallback_model.to(self.device)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load YOLO models: {e}")
 
         # Load Register CRNN model
-        self.register_crnn_model = CRNN(num_classes=11).to(self.device)
+        self.register_crnn_model = CRNN(num_classes=11)
+        self.register_crnn_model.to(self.device)
         if not os.path.exists(register_crnn_model_path):
             raise FileNotFoundError(f"Register CRNN model not found at: {register_crnn_model_path}")
-        checkpoint = torch.load(register_crnn_model_path, map_location=self.device)
-        state_dict = checkpoint.get('model_state_dict', checkpoint)
-        new_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
         try:
-            self.register_crnn_model.load_state_dict(new_state_dict)
-        except RuntimeError as e:
-            st.error(f"Failed to load register CRNN model: {e}")
-            raise
+            checkpoint = torch.load(register_crnn_model_path, map_location=self.device)
+            self.register_crnn_model.load_state_dict(checkpoint.get('model_state_dict', checkpoint))
+        except Exception as e:
+            raise RuntimeError(f"Failed to load register CRNN model: {e}")
         self.register_crnn_model.eval()
 
         # Load Subject CRNN model
-        self.subject_crnn_model = CRNN(num_classes=37).to(self.device)
+        self.subject_crnn_model = CRNN(num_classes=37)
+        self.subject_crnn_model.to(self.device)
         if not os.path.exists(subject_crnn_model_path):
             raise FileNotFoundError(f"Subject CRNN model not found at: {subject_crnn_model_path}")
-        checkpoint = torch.load(subject_crnn_model_path, map_location=self.device)
-        state_dict = checkpoint.get('model_state_dict', checkpoint)
-        new_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
         try:
-            self.subject_crnn_model.load_state_dict(new_state_dict)
-        except RuntimeError as e:
-            st.error(f"Failed to load subject CRNN model: {e}")
-            raise
+            checkpoint = torch.load(subject_crnn_model_path, map_location=self.device)
+            self.subject_crnn_model.load_state_dict(checkpoint.get('model_state_dict', checkpoint))
+        except Exception as e:
+            raise RuntimeError(f"Failed to load subject CRNN model: {e}")
         self.subject_crnn_model.eval()
 
         self.register_transform = transforms.Compose([
@@ -337,34 +415,39 @@ class AnswerSheetExtractor:
         self.register_char_map = {0: '', **{i: str(i-1) for i in range(1, 11)}}
         self.subject_char_map = {0: '', **{i: str(i-1) for i in range(1, 11)}, **{i: chr(i - 11 + ord('A')) for i in range(11, 37)}}
 
-    def detect_regions(self, image_path):
+    def detect_regions(self, image_path, model, model_name):
         image = cv2.imread(image_path)
         if image is None:
             st.error(f"Could not load image from {image_path}")
             return [], [], None
 
-        # Step 1: Run Primary YOLO Model
-        with st.spinner("Running primary YOLO model..."):
-            results_primary = self.primary_yolo_model(image)
-        detections_primary = results_primary[0].boxes
-        classes_primary = results_primary[0].names
+        try:
+            results = model(image)
+        except Exception as e:
+            st.error(f"YOLO detection error with {model_name}: {e}")
+            return [], [], None
+
+        detections = results[0].boxes
+        classes = results[0].names
         register_regions = []
-        subject_regions_primary = []
+        subject_regions = []
         overlay = image.copy()
 
-        for i, box in enumerate(detections_primary):
+        for box in detections:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             confidence = float(box.conf[0])
             class_id = int(box.cls[0])
-            label = classes_primary[class_id]
+            label = classes[class_id]
             h, w = image.shape[:2]
             x1, y1, x2, y2 = max(0, x1), max(0, y1), min(w, x2), min(h, y2)
+
             if x1 >= x2 or y1 >= y2:
                 continue
 
-            color = (0, 255, 0) if label == "RegisterNumber" else (0, 0, 255)
+            color = (0, 255, 0) if label == "RegisterNumber" else (0, 0, 255) if label == "SubjectCode" else (255, 0, 0)
             cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(overlay, f"{label} {confidence:.2f}", (x1, y1 - 10 if y1 > 20 else y1 + 20),
+            text_y = y1 - 10 if y1 > 20 else y1 + 20
+            cv2.putText(overlay, f"{label} {confidence:.2f}", (x1, text_y),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
             padding = 10
@@ -372,54 +455,41 @@ class AnswerSheetExtractor:
             padded_x2, padded_y2 = min(w, x2 + padding), min(h, y2 + padding)
             cropped_region = image[padded_y1:padded_y2, padded_x1:padded_x2]
             save_dir = os.path.join(self.script_dir, "cropped_register_numbers" if label == "RegisterNumber" else "cropped_subject_codes")
-            save_path = os.path.join(save_dir, f"{label.lower()}_primary_{i}_{uuid.uuid4().hex}.jpg")
+            save_path = os.path.join(save_dir, f"{label.lower()}_{model_name}_{uuid.uuid4().hex}.jpg")
             cv2.imwrite(save_path, cropped_region)
-            if label == "RegisterNumber" and confidence > 0.5:
+            if label == "RegisterNumber" and confidence > 0.2:
                 register_regions.append((save_path, confidence))
-            elif label == "SubjectCode" and confidence > 0.5:
-                subject_regions_primary.append((save_path, confidence))
+            elif label == "SubjectCode" and confidence > 0.2:
+                subject_regions.append((save_path, confidence))
 
-        # Step 2: Run Fallback YOLO Model for SubjectCode if necessary
-        final_subject_regions = subject_regions_primary
-        if not final_subject_regions:
-            with st.spinner("Primary model did not detect Subject Code. Running fallback YOLO model..."):
-                results_fallback = self.fallback_yolo_model(image)
-            detections_fallback = results_fallback[0].boxes
-            classes_fallback = results_fallback[0].names
-            subject_regions_fallback = []
-            for i, box in enumerate(detections_fallback):
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                confidence = float(box.conf[0])
-                class_id = int(box.cls[0])
-                label = classes_fallback[class_id]
-                h, w = image.shape[:2]
-                x1, y1, x2, y2 = max(0, x1), max(0, y1), min(w, x2), min(h, y2)
-                if x1 >= x2 or y1 >= y2:
-                    continue
-                if label != "SubjectCode" or confidence <= 0.5:
-                    continue
-                color = (0, 0, 255)
-                cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(overlay, f"{label} {confidence:.2f}", (x1, y1 - 10 if y1 > 20 else y1 + 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                padding = 10
-                padded_x1, padded_y1 = max(0, x1 - padding), max(0, y1 - padding)
-                padded_x2, padded_y2 = min(w, x2 + padding), min(h, y2 + padding)
-                cropped_region = image[padded_y1:padded_y2, padded_x1:padded_x2]
-                save_path = os.path.join(self.script_dir, "cropped_subject_codes", f"subjectcode_fallback_{i}_{uuid.uuid4().hex}.jpg")
-                cv2.imwrite(save_path, cropped_region)
-                subject_regions_fallback.append((save_path, confidence))
-            final_subject_regions = subject_regions_fallback
-            if final_subject_regions:
-                st_success(f"Fallback model detected {len(final_subject_regions)} Subject Code region(s).")
-            else:
-                st_warning("Fallback model also did not detect Subject Code.")
-        else:
-            st_success(f"Primary model detected {len(final_subject_regions)} Subject Code region(s).")
-
-        overlay_path = os.path.join(self.script_dir, "results", f"detection_overlay_{uuid.uuid4().hex}.jpg")
+        overlay_path = os.path.join(self.script_dir, "results", f"detection_overlay_{model_name}_{uuid.uuid4().hex}.jpg")
         cv2.imwrite(overlay_path, overlay)
-        return register_regions, final_subject_regions, overlay_path
+        return register_regions, subject_regions, overlay_path
+
+    def select_best_detections(self, improved_results, fallback_results):
+        improved_registers, improved_subjects, improved_overlay = improved_results
+        fallback_registers, fallback_subjects, fallback_overlay = fallback_results
+
+        # Initialize best selections
+        best_register = None
+        best_subject = None
+        best_overlay = improved_overlay  # Default to improved model's overlay
+
+        # Select best register number
+        if improved_registers:
+            best_register = max(improved_registers, key=lambda x: x[1])
+        if fallback_registers and (not best_register or best_register[1] < max(fallback_registers, key=lambda x: x[1])[1]):
+            best_register = max(fallback_registers, key=lambda x: x[1])
+            best_overlay = fallback_overlay
+
+        # Select best subject code
+        if improved_subjects:
+            best_subject = max(improved_subjects, key=lambda x: x[1])
+        if fallback_subjects and (not best_subject or best_subject[1] < max(fallback_subjects, key=lambda x: x[1])[1]):
+            best_subject = max(fallback_subjects, key=lambda x: x[1])
+            best_overlay = fallback_overlay
+
+        return best_register, best_subject, best_overlay
 
     def extract_text(self, image_path, model, img_transform, char_map):
         try:
@@ -436,9 +506,9 @@ class AnswerSheetExtractor:
                 result = []
                 for s in seq:
                     if s != 0 and s != prev:
-                        result.append(char_map.get(s, ''))
+                        result.append(char_map.get(s, '?'))
                     prev = s
-                return ''.join(result)
+            return ''.join(result)
         except Exception as e:
             st.error(f"Failed to extract text from {image_path}: {e}")
             return "ERROR"
@@ -451,45 +521,57 @@ class AnswerSheetExtractor:
 
     def process_answer_sheet(self, image_path):
         st.session_state.processing_start_time = time.time()
-        register_regions, subject_regions, overlay_path = self.detect_regions(image_path)
-        results = []
-        register_cropped_path = None
-        subject_cropped_path = None
 
-        if register_regions:
-            best_region = max(register_regions, key=lambda x: x[1])
-            register_cropped_path = best_region[0]
-            with st.spinner("Extracting Register Number..."):
-                register_number = self.extract_register_number(register_cropped_path)
-            results.append(("Register Number", register_number))
-            st_success(f"Register Number detected (Confidence: {best_region[1]:.2f}). Extracted: '{register_number}'")
+        # Step 1: Try improved model
+        with st.spinner("Detecting regions with improved model..."):
+            improved_results = self.detect_regions(image_path, self.yolo_improved_model, "improved")
+            improved_registers, improved_subjects, improved_overlay = improved_results
+
+        # Step 2: If either register or subject is not detected, try fallback model
+        if not (improved_registers and improved_subjects):
+            with st.spinner("Detecting regions with fallback model..."):
+                fallback_results = self.detect_regions(image_path, self.yolo_fallback_model, "fallback")
         else:
-            st_warning("No Register Number region detected.")
+            fallback_results = ([], [], None)  # No need for fallback if both detected
 
-        if subject_regions:
-            best_subject = subject_regions[1] if len(subject_regions) >= 2 else subject_regions[0]
-            subject_cropped_path = best_subject[0]
+        # Step 3: Select best detections
+        best_register, best_subject, best_overlay = self.select_best_detections(improved_results, fallback_results)
+
+        results = []
+        best_register_cropped_path = best_register[0] if best_register else None
+        best_subject_cropped_path = best_subject[0] if best_subject else None
+
+        # Step 4: Proceed with extraction for the best detections
+        if best_register:
+            with st.spinner("Extracting Register Number..."):
+                register_number = self.extract_register_number(best_register_cropped_path)
+            results.append(("Register Number", register_number))
+            st_success(f"Register Number detected (Confidence: {best_register[1]:.2f}). Extracted: '{register_number}'")
+        else:
+            st_warning("No RegisterNumber regions detected with either model.")
+
+        if best_subject:
             with st.spinner("Extracting Subject Code..."):
-                subject_code = self.extract_subject_code(subject_cropped_path)
+                subject_code = self.extract_subject_code(best_subject_cropped_path)
             results.append(("Subject Code", subject_code))
             st_success(f"Subject Code detected (Confidence: {best_subject[1]:.2f}). Extracted: '{subject_code}'")
         else:
-            st_warning("No Subject Code region detected.")
+            st_warning("No SubjectCode regions detected with either model.")
 
         processing_time = time.time() - st.session_state.processing_start_time
-        if results or overlay_path:
+        if results or best_overlay:
             history_item = {
                 "timestamp": datetime.now().strftime("%Y-%m-d %H:%M:%S"),
                 "original_image_path": image_path,
-                "overlay_image_path": overlay_path,
-                "register_cropped_path": register_cropped_path,
-                "subject_cropped_path": subject_cropped_path,
+                "overlay_image_path": best_overlay,
+                "register_cropped_path": best_register_cropped_path,
+                "subject_cropped_path": best_subject_cropped_path,
                 "results": results,
                 "processing_time": processing_time
             }
             st.session_state.results_history.insert(0, history_item)
 
-        return results, register_cropped_path, subject_cropped_path, overlay_path, processing_time
+        return results, best_register_cropped_path, best_subject_cropped_path, best_overlay, processing_time
 
 # WebRTC configuration
 RTC_CONFIGURATION = RTCConfiguration(
@@ -512,7 +594,7 @@ class VideoProcessor:
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
         current_time = time.time()
         img = frame.to_ndarray(format="bgr24")
-        self.frame = img
+        self.frame = img  # Always update frame to ensure it's not None
         self.last_processed = current_time
         self.frame_count += 1
         if current_time - self.last_frame_time >= 1.0:
@@ -568,7 +650,7 @@ def get_image_download_button(image_path, filename, button_text):
                     key=f"download_{filename.replace('.', '_')}_{uuid.uuid4().hex}"
                 )
         except Exception as e:
-            st_error(f"Failed to create download button for {filename}: {e}")
+            st_error(f"Failed to create download button качестве {filename}: {e}")
     return None
 
 # Save results helper
@@ -587,47 +669,13 @@ def save_results_to_file(results, filename_prefix="results"):
         st_error(f"Failed to save results to {filepath}: {e}")
         return None
 
-# Cache model loading
-@st.cache_resource
-def load_extractor():
-    try:
-        script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
-        yolo_improved_path = os.path.join(script_dir, "improved_weights.pt")
-        yolo_fallback_path = os.path.join(script_dir, "weights.pt")
-        # Swapped paths to match the error (assuming best_crnn_model(git).pth is for subject code)
-        register_crnn_path = os.path.join(script_dir, "best_subject_code_model.pth")
-        subject_crnn_path = os.path.join(script_dir, "best_crnn_model(git).pth")
-
-        # Check for model files and create dummy files if missing
-        for p, num_classes in [
-            (yolo_improved_path, None),
-            (yolo_fallback_path, None),
-            (register_crnn_path, 11),
-            (subject_crnn_path, 37)
-        ]:
-            if not os.path.exists(p):
-                st.warning(f"Model file {p} not found. Creating dummy file for testing.")
-                if p.endswith('.pt'):
-                    dummy_state = {'model': torch.nn.Module()}
-                    torch.save(dummy_state, p)
-                elif p.endswith('.pth'):
-                    dummy_model = CRNN(num_classes=num_classes)
-                    torch.save({'model_state_dict': dummy_model.state_dict()}, p)
-
-        extractor = AnswerSheetExtractor(
-            yolo_improved_path,
-            yolo_fallback_path,
-            register_crnn_path,
-            subject_crnn_path
-        )
-        return extractor
-    except Exception as e:
-        st.error(f"Failed to initialize extractor: {e}")
-        return None
-
 # Main app
 def main():
     display_header()
+
+    script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
+    model_files = ["improved_weights.pt", "weights.pt", "best_crnn_model.pth", "best_subject_code_model.pth"]
+    model_paths = [os.path.join(script_dir, f) for f in model_files]
 
     with st.spinner("Loading models..."):
         extractor = load_extractor()
@@ -661,8 +709,8 @@ def main():
         st.markdown("<h3>Choose input method:</h3>", unsafe_allow_html=True)
 
         st.markdown('<div class="input-buttons-col">', unsafe_allow_html=True)
-        if st.button("⬆️ Upload File", key="upload_file_btn"):
-            st.session_state.input_method = "Upload File"
+        if st.button("⬆️ Upload Image", key="upload_image_btn"):
+            st.session_state.input_method = "Upload Image"
             st.session_state.image_path = None
             st.session_state.image_captured = False
             st.session_state.selected_history_item_index = None
@@ -679,67 +727,43 @@ def main():
             st.session_state.image_captured = False
             st.session_state.selected_history_item_index = None
             st.session_state.webrtc_key = f"webrtc_{uuid.uuid4().hex}"
-            st.session_state.input_method = "Upload File"
-            st_info("Scan reset. Upload a file or use the camera.")
+            st.session_state.input_method = "Upload Image"
+            st_info("Scan reset. Upload an image or use the camera.")
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-        script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
-        temp_dir = os.path.join(script_dir, "temp_uploads")
-        os.makedirs(temp_dir, exist_ok=True)
-
-        if st.session_state.input_method == "Upload File":
+        if st.session_state.input_method == "Upload Image":
             with st.container():
                 st.markdown('<div class="camera-container">', unsafe_allow_html=True)
                 uploaded_file = st.file_uploader(
-                    "Upload Answer Sheet (PDF or Image)",
-                    type=["pdf", "png", "jpg", "jpeg"],
+                    "Upload Answer Sheet Image",
+                    type=["png", "jpg", "jpeg"],
                     key="uploader",
                     label_visibility="collapsed"
                 )
                 if uploaded_file:
-                    temp_file_path = os.path.join(temp_dir, uploaded_file.name)
-                    with open(temp_file_path, "wb") as f:
-                        f.write(uploaded_file.getbuffer())
                     file_extension = uploaded_file.name.split('.')[-1].lower()
-
-                    if file_extension == 'pdf':
-                        try:
-                            with st.spinner("Converting PDF to image..."):
-                                images = convert_from_path(temp_file_path, dpi=300, first_page=1, last_page=1)
-                            if images:
-                                image_filename = f"{os.path.splitext(uploaded_file.name)[0]}_page_1.jpg"
-                                image_path = os.path.join(temp_dir, image_filename)
-                                images[0].save(image_path, "JPEG")
-                                st.session_state.image_path = image_path
-                                st.session_state.image_captured = True
-                                st.session_state.selected_history_item_index = None
-                                st_success("Successfully converted PDF to image.")
-                            else:
-                                st_error("Could not convert PDF to image.")
-                        except Exception as e:
-                            st_error(f"Error converting PDF: {e}")
-                        finally:
-                            if os.path.exists(temp_file_path):
-                                os.remove(temp_file_path)
-                    elif file_extension in ['png', 'jpg', 'jpeg']:
-                        st.session_state.image_path = temp_file_path
+                    uploads_dir = os.path.join(script_dir, "uploads")
+                    os.makedirs(uploads_dir, exist_ok=True)
+                    temp_path = os.path.join(uploads_dir, f"image_{uuid.uuid4().hex}.{file_extension}")
+                    try:
+                        with open(temp_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+                        st.session_state.image_path = temp_path
                         st.session_state.image_captured = True
                         st.session_state.selected_history_item_index = None
-                    else:
-                        st_error(f"Unsupported file type: {file_extension}")
-                        if os.path.exists(temp_file_path):
-                            os.remove(temp_file_path)
-
-                    if st.session_state.image_path and os.path.exists(st.session_state.image_path):
                         st.markdown('<div class="image-container">', unsafe_allow_html=True)
                         st.image(st.session_state.image_path, caption="Uploaded Image", use_container_width=True)
                         st.markdown('</div>', unsafe_allow_html=True)
+                    except Exception as e:
+                        st_error(f"Error saving uploaded file: {e}")
+                        st.session_state.image_path = None
+                        st.session_state.image_captured = False
                 elif not st.session_state.image_path or not st.session_state.image_captured:
                     st.markdown("""
                     <div style="border: 2px dashed #ccc; border-radius: 5px; padding: 40px 20px; margin-top: 10px;">
                         <h3>Drag & drop or click to upload</h3>
-                        <p>Supported formats: PDF, JPG, PNG, JPEG</p>
+                        <p>Supported formats: JPG, PNG, JPEG</p>
                     </div>
                     """, unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -751,11 +775,20 @@ def main():
                     st.markdown("<h4>📸 Live Camera Feed</h4>", unsafe_allow_html=True)
                     st_info("Position the answer sheet within the frame and click 'Capture Image'.")
 
+                    media_constraints = {
+                        "video": {
+                            "width": {"ideal": 1280},
+                            "height": {"ideal": 720},
+                            "frameRate": {"ideal": 30}
+                        },
+                        "audio": False
+                    }
+
                     ctx = webrtc_streamer(
                         key=st.session_state.webrtc_key,
                         mode=WebRtcMode.SENDRECV,
                         rtc_configuration=RTC_CONFIGURATION,
-                        media_stream_constraints={"video": {"width": {"ideal": 1280}, "height": {"ideal": 720}, "frameRate": {"ideal": 30}}, "audio": False},
+                        media_stream_constraints=media_constraints,
                         video_processor_factory=VideoProcessor,
                         async_processing=True
                     )
@@ -766,18 +799,23 @@ def main():
                         if ctx.video_processor and hasattr(ctx.video_processor, 'frame') and ctx.video_processor.frame is not None:
                             frame_to_save = ctx.video_processor.frame
                             captures_dir = os.path.join(script_dir, "captures")
+                            os.makedirs(captures_dir, exist_ok=True)
                             temp_path = os.path.join(captures_dir, f"image_{uuid.uuid4().hex}.jpg")
-                            cv2.imwrite(temp_path, frame_to_save)
-                            if os.path.exists(temp_path):
+                            try:
+                                cv2.imwrite(temp_path, frame_to_save)
+                                if not os.path.exists(temp_path):
+                                    raise IOError("Failed to save captured image file.")
                                 st.session_state.image_path = temp_path
                                 st.session_state.image_captured = True
                                 st.session_state.selected_history_item_index = None
                                 st_success("Image captured successfully!")
                                 st.rerun()
-                            else:
-                                st_error("Failed to save captured image.")
+                            except Exception as e:
+                                st_error(f"Error saving captured image: {e}")
+                                st.session_state.image_path = None
+                                st.session_state.image_captured = False
                         else:
-                            st_warning("No frame available. Please wait and try again.")
+                            st_warning("No frame available yet. Please wait a moment and try again.")
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 elif st.session_state.image_path and os.path.exists(st.session_state.image_path):
@@ -870,19 +908,6 @@ def main():
                     status_placeholder.empty()
                     st_error(f"An unexpected error occurred during processing: {e}")
                     st_info("Please try again with a different image.")
-                finally:
-                    for folder in ["cropped_register_numbers", "cropped_subject_codes"]:
-                        if os.path.exists(folder):
-                            for file in os.listdir(folder):
-                                try:
-                                    os.remove(os.path.join(folder, file))
-                                except OSError:
-                                    pass
-                    if st.session_state.image_path and os.path.exists(st.session_state.image_path):
-                        try:
-                            os.remove(st.session_state.image_path)
-                        except OSError:
-                            pass
         st.markdown('</div>', unsafe_allow_html=True)
 
     elif selected_tab == "History":
@@ -908,7 +933,7 @@ def main():
                         <p><strong>Results:</strong> {results_summary}</p>
                         <p><strong>Processing Time:</strong> {processing_time:.2f} sec</p>
                     </div>
-                    """, unsafe_allow_html=True)
+                    """, untrue_allow_html=True)
                 with hist_cols[1]:
                     if st.button("View Details", key=f"view_history_{i}"):
                         st.session_state.selected_history_item_index = i
@@ -916,12 +941,12 @@ def main():
 
             st.markdown("---")
 
-            if st.session_state.selected_history_item_index is not None:
+            if 'selected_history_item_index' in st.session_state and st.session_state.selected_history_item_index is not None:
                 st.subheader("📜 Detailed History View")
                 try:
                     selected_item = st.session_state.results_history[st.session_state.selected_history_item_index]
                 except IndexError:
-                    st_error("Selected history item not found.")
+                    st_error("Selected history item not found. It might have been cleared.")
                     st.session_state.selected_history_item_index = None
                     st.rerun()
 
@@ -995,8 +1020,8 @@ def main():
             <h6>Key Technologies Used:</h6>
             <ul>
                 <li><b>Object Detection:</b> A custom-trained YOLOv8 model identifies the locations of the relevant fields (Register Number, Subject Code) on the sheet.</li>
-                <li><b>Text Recognition (OCR):</b> Convolutional Recurrent Neural Network (CRNN) models are employed to read the characters within the detected regions.</li>
-                <li><b>Web Interface:</b> Built with Streamlit, providing an interactive user interface for file upload, camera capture, and results visualization.</li>
+                <li><b>Text Recognition (OCR):</b> Convolutional Recurrent Neural Network (CRNN) models are employed to read the characters within the detected regions. Separate CRNN models are optimized for recognizing digits (Register Number) and alphanumeric characters (Subject Code).</li>
+                <li><b>Web Interface:</b> Built with Streamlit, providing an interactive user interface for image upload, camera capture, and results visualization.</li>
             </ul>
             """, unsafe_allow_html=True)
 
@@ -1005,24 +1030,34 @@ def main():
         st.markdown("""
         <ol>
             <li>Navigate to the <b>Scan</b> tab.</li>
-            <li>Choose your input method: <b>Upload File</b> (PDF or image) or <b>Use Camera</b>.</li>
-            <li>If uploading, select a PDF or image of the answer sheet.</li>
+            <li>Choose your input method: <b>Upload Image</b> or <b>Use Camera</b>.</li>
+            <li>If uploading, select a clear image of the answer sheet.</li>
             <li>If using the camera, position the sheet clearly and click <b>Capture Image</b>.</li>
-            <li>Click <b>Extract Information</b>.</li>
+            <li>Once an image is loaded or captured, click <b>Extract Information</b>.</li>
             <li>View the extracted text, detection overlays, and cropped regions.</li>
             <li>Check the <b>History</b> tab to review past scans.</li>
         </ol>
         """, unsafe_allow_html=True)
 
         st.markdown("---")
+        st.markdown("<h6>Model Information:</h6>", unsafe_allow_html=True)
+        st.markdown("""
+        <ul>
+            <li>The models require specific weights files (<code>improved_weights.pt</code>, <code>weights.pt</code>, <code>best_crnn_model.pth</code>, <code>best_subject_code_model.pth</code>) to be present in the same directory as the script.</li>
+            <li>Accuracy is dependent on the quality of the input image (clarity, lighting, angle) and the training data used for the models.</li>
+            <li>If model files are missing, dummy files are created for testing. Replace them with trained model weights for production use.</li>
+        </ul>
+        """, unsafe_allow_html=True)
+
+        st.markdown("---")
         st.markdown("<h6>Disclaimer:</h6>", unsafe_allow_html=True)
-        st_warning("This tool is for demonstration purposes. Extracted results should be verified for accuracy.")
+        st_warning("This tool is for demonstration or assistive purposes. Extracted results should always be verified for accuracy, especially in critical applications.")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="footer">', unsafe_allow_html=True)
     st.markdown('<div class="footer-content">', unsafe_allow_html=True)
-    st.markdown("<p>© 2025 Smart Scanner Project. Built with Streamlit.!!</p>", unsafe_allow_html=True)
+    st.markdown("<p>© 2025 Smart Scanner Project. Built with Streamlit.</p>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
