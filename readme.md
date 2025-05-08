@@ -10,5 +10,5 @@ A Streamlit application to extract register numbers and subject codes from answe
 ## Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/answer-sheet-extractor.git
+   git clone https://github.com/d-kavinraja/answer-sheet-extractor.git
    cd answer-sheet-extractor
