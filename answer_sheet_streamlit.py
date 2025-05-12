@@ -902,7 +902,7 @@ def main():
                             st.markdown('</div>', unsafe_allow_html=True)
                             get_image_download_button(subject_cropped, 'subject_code_crop.jpg', 'Download Subject Code Croped Image')
                         if not register_cropped and not subject_cropped:
-                            st_info("No regions cropped.")
+                            st_info("No regions cropped....")
                 except Exception as e:
                     progress_bar.empty()
                     status_placeholder.empty()
