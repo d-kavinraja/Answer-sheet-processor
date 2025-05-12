@@ -895,12 +895,12 @@ def main():
                             st.markdown('<div class="image-container">', unsafe_allow_html=True)
                             st.image(register_cropped, caption="Register Number", use_container_width=True)
                             st.markdown('</div>', unsafe_allow_html=True)
-                            get_image_download_button(register_cropped, "register_number_crop.jpg", "Download Register Crop")
+                            get_image_download_button(register_cropped, "register_number_crop.jpg", "Download Register Number Cropped Image")
                         if subject_cropped and os.path.exists(subject_cropped):
                             st.markdown('<div class="image-container">', unsafe_allow_html=True)
                             st.image(subject_cropped, caption="Subject Code", use_container_width=True)
                             st.markdown('</div>', unsafe_allow_html=True)
-                            get_image_download_button(subject_cropped, 'subject_code_crop.jpg', 'Download Subject Crop')
+                            get_image_download_button(subject_cropped, 'subject_code_crop.jpg', 'Download Subject Code Croped Image')
                         if not register_cropped and not subject_cropped:
                             st_info("No regions cropped.")
                 except Exception as e:
