@@ -7,6 +7,7 @@ torch
 pdf2image
 torchvision
 av
+pymongo
 pypdfium2
 PyPDF2
 numpy
