@@ -3,10 +3,9 @@ streamlit-webrtc==0.47.7
 streamlit-image-comparison==0.0.4
 opencv-python-headless==4.10.0.84
 ultralytics==8.3.13
-torch==2.4.1
+torch==2.1.0
+torchvision==0.16.0
 pdf2image==1.17.0
-torchvision==0.19.1
-av==12.3.0
 numpy==1.26.4
 Pillow==10.4.0
 streamlit-option-menu==0.3.13
