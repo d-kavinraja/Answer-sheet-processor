@@ -735,40 +735,62 @@ def main():
 
         if st.session_state.input_method == "Upload Image":
             with st.container():
-                st.markdown('<div class="camera-container">', unsafe_allow_html=True)
-                uploaded_file = st.file_uploader(
-                    "Upload Answer Sheet Image",
-                    type=["png", "jpg", "jpeg"],
-                    key="uploader",
-                    label_visibility="collapsed"
-                )
-                if uploaded_file:
-                    file_extension = uploaded_file.name.split('.')[-1].lower()
-                    uploads_dir = os.path.join(script_dir, "uploads")
-                    os.makedirs(uploads_dir, exist_ok=True)
-                    temp_path = os.path.join(uploads_dir, f"image_{uuid.uuid4().hex}.{file_extension}")
-                    try:
-                        with open(temp_path, "wb") as f:
-                            f.write(uploaded_file.getbuffer())
-                        st.session_state.image_path = temp_path
+            st.markdown('<div class="camera-container">', unsafe_allow_html=True)
+            uploaded_file = st.file_uploader(
+                "Upload Answer Sheet (Image or PDF, First Page Used)",
+                type=["png", "jpg", "jpeg", "pdf"],
+                key="uploader",
+                label_visibility="collapsed"
+            )
+        if uploaded_file:
+            uploads_dir = os.path.join(script_dir, "uploads")
+            os.makedirs(uploads_dir, exist_ok=True)
+            file_extension = uploaded_file.name.split('.')[-1].lower()
+            if file_extension == "pdf":
+                try:
+                    st.info("PDF detected. Extracting first page ...")
+                    pages = convert_from_bytes(uploaded_file.read(), dpi=300, first_page=1, last_page=1)
+                    if pages:
+                        page_img = pages[0]
+                        img_path = os.path.join(uploads_dir, f"pdf_page1_{uuid.uuid4().hex}.jpg")
+                        page_img.save(img_path, "JPEG")
+                        st.session_state.image_path = img_path
                         st.session_state.image_captured = True
                         st.session_state.selected_history_item_index = None
                         st.markdown('<div class="image-container">', unsafe_allow_html=True)
-                        st.image(st.session_state.image_path, caption="Uploaded Image", use_container_width=True)
+                        st.image(img_path, caption="First Page of PDF", use_container_width=True)
                         st.markdown('</div>', unsafe_allow_html=True)
-                    except Exception as e:
-                        st_error(f"Error saving uploaded file: {e}")
+                    else:
+                        st_error("Failed to extract any page from PDF.")
                         st.session_state.image_path = None
                         st.session_state.image_captured = False
-                elif not st.session_state.image_path or not st.session_state.image_captured:
-                    st.markdown("""
-                    <div style="border: 2px dashed #ccc; border-radius: 5px; padding: 40px 20px; margin-top: 10px;">
-                        <h3>Drag & drop or click to upload</h3>
-                        <p>Supported formats: JPG, PNG, JPEG</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-
+                except Exception as e:
+                    st_error(f"Error processing PDF: {e}")
+                    st.session_state.image_path = None
+                    st.session_state.image_captured = False
+            else:
+                img_path = os.path.join(uploads_dir, f"image_{uuid.uuid4().hex}.{file_extension}")
+                try:
+                    with open(img_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    st.session_state.image_path = img_path
+                    st.session_state.image_captured = True
+                    st.session_state.selected_history_item_index = None
+                    st.markdown('<div class="image-container">', unsafe_allow_html=True)
+                    st.image(img_path, caption="Uploaded Image", use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st_error(f"Error saving uploaded file: {e}")
+                    st.session_state.image_path = None
+                    st.session_state.image_captured = False
+        elif not st.session_state.image_path or not st.session_state.image_captured:
+            st.markdown("""
+            <div style="border: 2px dashed #ccc; border-radius: 5px; padding: 40px 20px; margin-top: 10px;">
+                <h3>Drag & drop or click to upload Answer Sheet</h3>
+                <p>Supported formats: JPG, PNG, JPEG, <b>PDF (First Page Only)</b></p>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
         else:  # Use Camera
             with st.container():
                 st.markdown('<div class="camera-container">', unsafe_allow_html=True)
