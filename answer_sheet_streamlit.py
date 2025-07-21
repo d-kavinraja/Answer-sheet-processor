@@ -14,8 +14,12 @@ import time
 from streamlit_option_menu import option_menu
 from streamlit_image_comparison import image_comparison
 from datetime import datetime
-import json
 from pdf2image import convert_from_bytes
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Set page configuration
 st.set_page_config(
@@ -25,205 +29,39 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for styling with theme compatibility and mobile-friendly buttons
+# Custom CSS for styling
 def local_css():
     st.markdown("""
     <style>
-        /* Theme compatibility: Use Streamlit theme variables */
-        .stApp {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        /* Hide header button */
-        [data-testid="stHeader"] button {
-            display: none !important;
-        }
-
-        /* Button styling */
+        .stApp { max-width: 1200px; margin: 0 auto; }
+        [data-testid="stHeader"] button { display: none !important; }
         .stButton>button {
-            font-weight: 500;
-            border-radius: 10px;
-            padding: 0.75rem 1.5rem;
-            transition: all 0.3s;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            width: 100%;
-            font-size: 1.1rem;
+            font-weight: 500; border-radius: 10px; padding: 0.75rem 1.5rem;
+            transition: all 0.3s; cursor: pointer; display: inline-flex;
+            align-items: center; justify-content: center; gap: 8px; width: 100%; font-size: 1.1rem;
         }
-
-        /* Status boxes */
-        .success-box {
-            background-color: #d4edda;
-            border-color: #c3e6cb;
-            color: #155724 !important;
-            padding: 1rem;
-            border-radius: 0.25rem;
-            margin-bottom: 1rem;
-        }
-        .error-box {
-            background-color: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24 !important;
-            padding: 1rem;
-            border-radius: 0.25rem;
-            margin-bottom: 1rem;
-        }
-        .info-box {
-            background-color: #cce5ff;
-            border-color: #b8daff;
-            color: #004085 !important;
-            padding: 1rem;
-            border-radius: 0.25rem;
-            margin-bottom: 1rem;
-        }
-        .warning-box {
-            background-color: #fff3cd;
-            border-color: #ffeeba;
-            color: #856404 !important;
-            padding: 1rem;
-            border-radius: 0.25rem;
-            margin-bottom: 1rem;
-        }
-
-        /* Result card */
-        .result-card {
-            background-color: var(--secondary-background-color);
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-
-        /* Header container */
-        .header-container {
-            background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            color: var(--text-color-inverse);
-        }
-        .header-container h1, .header-container p {
-            color: var(--text-color-inverse);
-        }
-
-        /* Camera container */
-        .camera-container {
-            border: 2px dashed #ccc;
-            border-radius: 10px;
-            padding: 15px;
-            background-color: var(--secondary-background-color);
-        }
-
-        .image-container {
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-
-        /* Tab content */
-        .tab-content {
-            padding: 20px;
-            border-radius: 0 0 10px 10px;
-            background-color: var(--background-color);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-
-        /* History item */
-        .history-item {
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            background-color: var(--secondary-background-color);
-            cursor: pointer;
-            transition: all 0.3s;
-            border-left: 5px solid var(--primary-color);
-        }
-        .history-item:hover {
-            filter: brightness(95%);
-            transform: translateY(-2px);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        /* Footer */
-        .footer {
-            margin-top: 50px;
-            padding: 20px;
-            text-align: center;
-            font-size: 0.9rem;
-            background-color: var(--secondary-background-color);
-            border-radius: 10px;
-            box-shadow: 0 -2px 4px rgba(0,0,0,0.05);
-            width: 100%;
-        }
-        .footer a {
-            color: var(--primary-color) !important;
-            text-decoration: none;
-            transition: color 0.3s;
-        }
-        .footer a:hover {
-            filter: brightness(85%);
-            text-decoration: underline;
-        }
-        .footer-content {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-        }
-
-        /* Camera controls */
-        .camera-controls {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin-top: 15px;
-        }
-        .camera-controls .stButton>button {
-            padding: 1rem 2rem;
-            font-size: 1.2rem;
-        }
-
-        /* Progress bar */
-        .stProgress > div > div > div > div {
-            background-color: var(--primary-color) !important;
-        }
-
-        /* Input buttons column */
-        .input-buttons-col {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            margin-bottom: 20px;
-            max-width: 250px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        /* Extracted output */
-        .extracted-output {
-            background-color: var(--secondary-background-color);
-            border: 2px solid var(--primary-color);
-            border-radius: 10px;
-            padding: 15px;
-            margin-top: 20px;
-            font-family: 'Courier New', Courier, monospace;
-            color: var(--text-color);
-        }
-
-        /* Image comparison width control */
-        .image-comparison-container {
-            width: 100%;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        /* Mobile responsiveness */
+        .success-box { background-color: #d4edda; border-color: #c3e6cb; color: #155724 !important; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem; }
+        .error-box { background-color: #f8d7da; border-color: #f5c6cb; color: #721c24 !important; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem; }
+        .info-box { background-color: #cce5ff; border-color: #b8daff; color: #004085 !important; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem; }
+        .warning-box { background-color: #fff3cd; border-color: #ffeeba; color: #856404 !important; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem; }
+        .result-card { background-color: var(--secondary-background-color); border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .header-container { background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%); padding: 20px; border-radius: 10px; margin-bottom: 30px; color: var(--text-color-inverse); }
+        .header-container h1, .header-container p { color: var(--text-color-inverse); }
+        .camera-container { border: 2px dashed #ccc; border-radius: 10px; padding: 15px; background-color: var(--secondary-background-color); }
+        .image-container { border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .tab-content { padding: 20px; border-radius: 0 0 10px 10px; background-color: var(--background-color); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .history-item { padding: 15px; border-radius: 8px; margin-bottom: 15px; background-color: var(--secondary-background-color); cursor: pointer; transition: all 0.3s; border-left: 5px solid var(--primary-color); }
+        .history-item:hover { filter: brightness(95%); transform: translateY(-2px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .footer { margin-top: 50px; padding: 20px; text-align: center; font-size: 0.9rem; background-color: var(--secondary-background-color); border-radius: 10px; box-shadow: 0 -2px 4px rgba(0,0,0,0.05); width: 100%; }
+        .footer a { color: var(--primary-color) !important; text-decoration: none; transition: color 0.3s; }
+        .footer a:hover { filter: brightness(85%); text-decoration: underline; }
+        .footer-content { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .camera-controls { display: flex; justify-content: center; gap: 20px; margin-top: 15px; }
+        .camera-controls .stButton>button { padding: 1rem 2rem; font-size: 1.2rem; }
+        .stProgress > div > div > div > div { background-color: var(--primary-color) !important; }
+        .input-buttons-col { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; max-width: 250px; margin-left: auto; margin-right: auto; }
+        .extracted-output { background-color: var(--secondary-background-color); border: 2px solid var(--primary-color); border-radius: 10px; padding: 15px; margin-top: 20px; font-family: 'Courier New', Courier, monospace; color: var(--text-color); }
+        .image-comparison-container { width: 100%; max-width: 600px; margin: 0 auto; }
         @media (max-width: 768px) {
             .footer { padding: 15px; font-size: 0.8rem; }
             .footer-content { flex-direction: column; gap: 8px; }
@@ -307,29 +145,19 @@ class CRNN(nn.Module):
 def load_extractor():
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
-        yolo_improved_path = os.path.join(script_dir, "improved_weights.pt")
-        yolo_fallback_path = os.path.join(script_dir, "weights.pt")
-        register_crnn_path = os.path.join(script_dir, "best_crnn_model.pth")
-        subject_crnn_path = os.path.join(script_dir, "best_subject_code_model.pth")
+        model_dir = os.path.join(script_dir, "models")
+        os.makedirs(model_dir, exist_ok=True)
+        yolo_improved_path = os.path.join(model_dir, "improved_weights.pt")
+        yolo_fallback_path = os.path.join(model_dir, "weights.pt")
+        register_crnn_path = os.path.join(model_dir, "best_crnn_model.pth")
+        subject_crnn_path = os.path.join(model_dir, "best_subject_code_model.pth")
 
-        # Check for model files and create dummy files if missing (for testing)
-        for p in [yolo_improved_path, yolo_fallback_path, register_crnn_path, subject_crnn_path]:
-            if not os.path.exists(p):
-                st.warning(f"Model file {p} not found. Creating dummy file for testing. Replace with actual model weights for production use!")
-                if p.endswith('.pt'):
-                    try:
-                        dummy_state = {'model': torch.nn.Module()}
-                        torch.save(dummy_state, p)
-                    except Exception as e:
-                        st.error(f"Failed to create dummy YOLO file {p}: {e}")
-                        open(p, 'a').close()
-                elif p.endswith('.pth'):
-                    try:
-                        dummy_model = CRNN(num_classes=11 if 'register' in p else 37)
-                        torch.save({'model_state_dict': dummy_model.state_dict()}, p)
-                    except Exception as e:
-                        st.error(f"Failed to create dummy CRNN file {p}: {e}")
-                        open(p, 'a').close()
+        # Check for model files
+        model_files = [yolo_improved_path, yolo_fallback_path, register_crnn_path, subject_crnn_path]
+        for p in model_files:
+            if notf not os.path.exists(p):
+                st.warning(f"Model file {p} not found. Please ensure model weights are included in the 'models' directory.")
+                return None
 
         extractor = AnswerSheetExtractor(
             yolo_improved_path,
@@ -340,7 +168,7 @@ def load_extractor():
         return extractor
     except Exception as e:
         st.error(f"Failed to initialize extractor: {e}")
-        st.info("Ensure model files (improved_weights.pt, weights.pt, best_crnn_model.pth, best_subject_code_model.pth) are in the script's directory.")
+        st.info("Ensure model files are in the 'models' directory of your repository.")
         return None
 
 # AnswerSheetExtractor class
@@ -351,52 +179,39 @@ class AnswerSheetExtractor:
             os.makedirs(os.path.join(script_dir, dir_name), exist_ok=True)
         self.script_dir = script_dir
 
-        # Robust device selection
-        try:
-            cuda_available = torch.cuda.is_available()
-            self.device = torch.device('cuda' if cuda_available else 'cpu')
-            if cuda_available:
-                st.info(f"Using CUDA device: {torch.cuda.get_device_name(0)}")
-            else:
-                st.info("CUDA not available. Using CPU.")
-        except Exception as e:
-            st.warning(f"Error checking CUDA availability: {e}. Falling back to CPU.")
-            self.device = torch.device('cpu')
+        # Device selection
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        logger.info(f"Using device: {self.device}")
 
         # Load YOLO models
-        if not os.path.exists(yolo_improved_weights_path):
-            raise FileNotFoundError(f"Improved YOLO weights not found at: {yolo_improved_weights_path}")
-        if not os.path.exists(yolo_fallback_weights_path):
-            raise FileNotFoundError(f"Fallback YOLO weights not found at: {yolo_fallback_weights_path}")
         try:
             self.yolo_improved_model = YOLO(yolo_improved_weights_path)
             self.yolo_improved_model.to(self.device)
             self.yolo_fallback_model = YOLO(yolo_fallback_weights_path)
             self.yolo_fallback_model.to(self.device)
         except Exception as e:
+            logger.error(f"Failed to load YOLO models: {e}")
             raise RuntimeError(f"Failed to load YOLO models: {e}")
 
         # Load Register CRNN model
         self.register_crnn_model = CRNN(num_classes=11)
         self.register_crnn_model.to(self.device)
-        if not os.path.exists(register_crnn_model_path):
-            raise FileNotFoundError(f"Register CRNN model not found at: {register_crnn_model_path}")
         try:
             checkpoint = torch.load(register_crnn_model_path, map_location=self.device)
             self.register_crnn_model.load_state_dict(checkpoint.get('model_state_dict', checkpoint))
         except Exception as e:
+            logger.error(f"Failed to load register CRNN model: {e}")
             raise RuntimeError(f"Failed to load register CRNN model: {e}")
         self.register_crnn_model.eval()
 
         # Load Subject CRNN model
         self.subject_crnn_model = CRNN(num_classes=37)
         self.subject_crnn_model.to(self.device)
-        if not os.path.exists(subject_crnn_model_path):
-            raise FileNotFoundError(f"Subject CRNN model not found at: {subject_crnn_model_path}")
         try:
             checkpoint = torch.load(subject_crnn_model_path, map_location=self.device)
             self.subject_crnn_model.load_state_dict(checkpoint.get('model_state_dict', checkpoint))
         except Exception as e:
+            logger.error(f"Failed to load subject CRNN model: {e}")
             raise RuntimeError(f"Failed to load subject CRNN model: {e}")
         self.subject_crnn_model.eval()
 
@@ -419,13 +234,13 @@ class AnswerSheetExtractor:
     def detect_regions(self, image_path, model, model_name):
         image = cv2.imread(image_path)
         if image is None:
-            st.error(f"Could not load image from {image_path}")
+            logger.error(f"Could not load image from {image_path}")
             return [], [], None
 
         try:
             results = model(image)
         except Exception as e:
-            st.error(f"YOLO detection error with {model_name}: {e}")
+            logger.error(f"YOLO detection error with {model_name}: {e}")
             return [], [], None
 
         detections = results[0].boxes
@@ -471,19 +286,16 @@ class AnswerSheetExtractor:
         improved_registers, improved_subjects, improved_overlay = improved_results
         fallback_registers, fallback_subjects, fallback_overlay = fallback_results
 
-        # Initialize best selections
         best_register = None
         best_subject = None
-        best_overlay = improved_overlay  # Default to improved model's overlay
+        best_overlay = improved_overlay
 
-        # Select best register number
         if improved_registers:
             best_register = max(improved_registers, key=lambda x: x[1])
         if fallback_registers and (not best_register or best_register[1] < max(fallback_registers, key=lambda x: x[1])[1]):
             best_register = max(fallback_registers, key=lambda x: x[1])
             best_overlay = fallback_overlay
 
-        # Select best subject code
         if improved_subjects:
             best_subject = max(improved_subjects, key=lambda x: x[1])
         if fallback_subjects and (not best_subject or best_subject[1] < max(fallback_subjects, key=lambda x: x[1])[1]):
@@ -495,7 +307,7 @@ class AnswerSheetExtractor:
     def extract_text(self, image_path, model, img_transform, char_map):
         try:
             if not os.path.exists(image_path):
-                st.error(f"Cropped image not found: {image_path}")
+                logger.error(f"Cropped image not found: {image_path}")
                 return "FILE_MISSING"
             image = Image.open(image_path).convert('L')
             image_tensor = img_transform(image).unsqueeze(0).to(self.device)
@@ -511,7 +323,7 @@ class AnswerSheetExtractor:
                     prev = s
             return ''.join(result)
         except Exception as e:
-            st.error(f"Failed to extract text from {image_path}: {e}")
+            logger.error(f"Failed to extract text from {image_path}: {e}")
             return "ERROR"
 
     def extract_register_number(self, image_path):
@@ -523,26 +335,22 @@ class AnswerSheetExtractor:
     def process_answer_sheet(self, image_path):
         st.session_state.processing_start_time = time.time()
 
-        # Step 1: Try improved model
         with st.spinner("Detecting regions with improved model..."):
             improved_results = self.detect_regions(image_path, self.yolo_improved_model, "improved")
             improved_registers, improved_subjects, improved_overlay = improved_results
 
-        # Step 2: If either register or subject is not detected, try fallback model
         if not (improved_registers and improved_subjects):
             with st.spinner("Detecting regions with fallback model..."):
                 fallback_results = self.detect_regions(image_path, self.yolo_fallback_model, "fallback")
         else:
-            fallback_results = ([], [], None)  # No need for fallback if both detected
+            fallback_results = ([], [], None)
 
-        # Step 3: Select best detections
         best_register, best_subject, best_overlay = self.select_best_detections(improved_results, fallback_results)
 
         results = []
         best_register_cropped_path = best_register[0] if best_register else None
         best_subject_cropped_path = best_subject[0] if best_subject else None
 
-        # Step 4: Proceed with extraction for the best detections
         if best_register:
             with st.spinner("Extracting Register Number..."):
                 register_number = self.extract_register_number(best_register_cropped_path)
@@ -595,7 +403,7 @@ class VideoProcessor:
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
         current_time = time.time()
         img = frame.to_ndarray(format="bgr24")
-        self.frame = img  # Always update frame to ensure it's not None
+        self.frame = img
         self.last_processed = current_time
         self.frame_count += 1
         if current_time - self.last_frame_time >= 1.0:
@@ -651,7 +459,7 @@ def get_image_download_button(image_path, filename, button_text):
                     key=f"download_{filename.replace('.', '_')}_{uuid.uuid4().hex}"
                 )
         except Exception as e:
-            st_error(f"Failed to create download button качестве {filename}: {e}")
+            st_error(f"Failed to create download button for {filename}: {e}")
     return None
 
 # Save results helper
@@ -673,16 +481,14 @@ def save_results_to_file(results, filename_prefix="results"):
 # Main app
 def main():
     display_header()
-
     script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
-    model_files = ["improved_weights.pt", "weights.pt", "best_crnn_model.pth", "best_subject_code_model.pth"]
-    model_paths = [os.path.join(script_dir, f) for f in model_files]
 
     with st.spinner("Loading models..."):
         extractor = load_extractor()
         if extractor:
             st_success("Models loaded successfully!")
         else:
+            st_error("Failed to load models. Please ensure model files are in the 'models' directory.")
             st.stop()
 
     selected_tab = option_menu(
@@ -710,7 +516,7 @@ def main():
         st.markdown("<h3>Choose input method:</h3>", unsafe_allow_html=True)
 
         st.markdown('<div class="input-buttons-col">', unsafe_allow_html=True)
-        if st.button("⬆️ Upload Image", key="upload_image_btn"):
+        if st.button("⬆️ Upload Image/PDF", key="upload_image_btn"):
             st.session_state.input_method = "Upload Image"
             st.session_state.image_path = None
             st.session_state.image_captured = False
@@ -729,138 +535,64 @@ def main():
             st.session_state.selected_history_item_index = None
             st.session_state.webrtc_key = f"webrtc_{uuid.uuid4().hex}"
             st.session_state.input_method = "Upload Image"
-            st_info("Scan reset. Upload an image or use the camera.")
+            st_info("Scan reset. Upload an image/PDF or use the camera.")
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
-        
 
         if st.session_state.input_method == "Upload Image":
             with st.container():
                 st.markdown('<div class="camera-container">', unsafe_allow_html=True)
                 uploaded_file = st.file_uploader(
-                    "Upload Answer Sheet (Image or PDF, First Page Used)",
+                    "Upload Answer Sheet Image or PDF",
                     type=["png", "jpg", "jpeg", "pdf"],
                     key="uploader",
                     label_visibility="collapsed"
                 )
                 if uploaded_file:
+                    file_extension = uploaded_file.name.split('.')[-1].lower()
                     uploads_dir = os.path.join(script_dir, "uploads")
                     os.makedirs(uploads_dir, exist_ok=True)
-                    file_extension = uploaded_file.name.split('.')[-1].lower()
-                    if file_extension == "pdf":
-                        try:
-                            st.info("PDF detected. Extracting first page ...")
-                            pages = convert_from_bytes(uploaded_file.read(), dpi=300, first_page=1, last_page=1)
-                            if pages:
-                                page_img = pages[0]
-                                img_path = os.path.join(uploads_dir, f"pdf_page1_{uuid.uuid4().hex}.jpg")
-                                page_img.save(img_path, "JPEG")
-                                st.session_state.image_path = img_path
-                                st.session_state.image_captured = True
-                                st.session_state.selected_history_item_index = None
-                                st.markdown('<div class="image-container">', unsafe_allow_html=True)
-                                st.image(img_path, caption="First Page of PDF", use_container_width=True)
-                                st.markdown('</div>', unsafe_allow_html=True)
-                            else:
-                                st_error("Failed to extract any page from PDF.")
-                                st.session_state.image_path = None
-                                st.session_state.image_captured = False
-                        except Exception as e:
-                            st_error(f"Error processing PDF: {e}")
-                            st.session_state.image_path = None
-                            st.session_state.image_captured = False
-                    else:
-                        img_path = os.path.join(uploads_dir, f"image_{uuid.uuid4().hex}.{file_extension}")
-                        try:
-                            with open(img_path, "wb") as f:
+                    temp_path = os.path.join(uploads_dir, f"image_{uuid.uuid4().hex}.jpg")
+                    try:
+                        if file_extension == "pdf":
+                            with st.spinner("Converting PDF to image..."):
+                                images = convert_from_bytes(uploaded_file.read(), first_page=1, last_page=1)
+                                if images:
+                                    images[0].save(temp_path, "JPEG")
+                                    logger.info("PDF converted to image successfully")
+                                else:
+                                    st_error("Failed to convert PDF to image.")
+                                    st.session_state.image_path = None
+                                    st.session_state.image_captured = False
+                                    st.markdown('</div>', unsafe_allow_html=True)
+                                    return
+                        else:
+                            with open(temp_path, "wb") as f:
                                 f.write(uploaded_file.getbuffer())
-                            st.session_state.image_path = img_path
-                            st.session_state.image_captured = True
-                            st.session_state.selected_history_item_index = None
-                            st.markdown('<div class="image-container">', unsafe_allow_html=True)
-                            st.image(img_path, caption="Uploaded Image", use_container_width=True)
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        except Exception as e:
-                            st_error(f"Error saving uploaded file: {e}")
-                            st.session_state.image_path = None
-                            st.session_state.image_captured = False
+                        st.session_state.image_path = temp_path
+                        st.session_state.image_captured = True
+                        st.session_state.selected_history_item_index = None
+                        st.markdown('<div class="image-container">', unsafe_allow_html=True)
+                        st.image(st.session_state.image_path, caption="Uploaded Image", use_container_width=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    except Exception as e:
+                        logger.error(f"Error processing file: {e}")
+                        st_error(f"Error processing file: {e}")
+                        st.session_state.image_path = None
+                        st.session_state.image_captured = False
                 elif not st.session_state.image_path or not st.session_state.image_captured:
                     st.markdown("""
                     <div style="border: 2px dashed #ccc; border-radius: 5px; padding: 40px 20px; margin-top: 10px;">
-                        <h3>Drag & drop or click to upload Answer Sheet</h3>
-                        <p>Supported formats: JPG, PNG, JPEG, <b>PDF (First Page Only)</b></p>
+                        <h3>Drag & drop or click to upload</h3>
+                        <p>Supported formats: JPG, PNG, JPEG, PDF</p>
                     </div>
                     """, unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        
         else:  # Use Camera
-            with st.container():
-                st.markdown('<div class="camera-container">', unsafe_allow_html=True)
-                if not st.session_state.image_captured:
-                    st.markdown("<h4>📸 Live Camera Feed</h4>", unsafe_allow_html=True)
-                    st_info("Position the answer sheet within the frame and click 'Capture Image'.")
-
-                    media_constraints = {
-                        "video": {
-                            "width": {"ideal": 1280},
-                            "height": {"ideal": 720},
-                            "frameRate": {"ideal": 30}
-                        },
-                        "audio": False
-                    }
-
-                    ctx = webrtc_streamer(
-                        key=st.session_state.webrtc_key,
-                        mode=WebRtcMode.SENDRECV,
-                        rtc_configuration=RTC_CONFIGURATION,
-                        media_stream_constraints=media_constraints,
-                        video_processor_factory=VideoProcessor,
-                        async_processing=True
-                    )
-
-                    st.markdown('<div class="camera-controls">', unsafe_allow_html=True)
-                    capture_btn_disabled = not (ctx.state.playing and ctx.video_processor)
-                    if st.button("📸 Capture Image", key="capture_btn", disabled=capture_btn_disabled):
-                        if ctx.video_processor and hasattr(ctx.video_processor, 'frame') and ctx.video_processor.frame is not None:
-                            frame_to_save = ctx.video_processor.frame
-                            captures_dir = os.path.join(script_dir, "captures")
-                            os.makedirs(captures_dir, exist_ok=True)
-                            temp_path = os.path.join(captures_dir, f"image_{uuid.uuid4().hex}.jpg")
-                            try:
-                                cv2.imwrite(temp_path, frame_to_save)
-                                if not os.path.exists(temp_path):
-                                    raise IOError("Failed to save captured image file.")
-                                st.session_state.image_path = temp_path
-                                st.session_state.image_captured = True
-                                st.session_state.selected_history_item_index = None
-                                st_success("Image captured successfully!")
-                                st.rerun()
-                            except Exception as e:
-                                st_error(f"Error saving captured image: {e}")
-                                st.session_state.image_path = None
-                                st.session_state.image_captured = False
-                        else:
-                            st_warning("No frame available yet. Please wait a moment and try again.")
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-                elif st.session_state.image_path and os.path.exists(st.session_state.image_path):
-                    st.markdown("<h4>Captured Image</h4>", unsafe_allow_html=True)
-                    st.markdown('<div class="image-container">', unsafe_allow_html=True)
-                    st.image(st.session_state.image_path, caption="Captured Image", use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    if st.button("🔄 Recapture Image", key="recapture_btn"):
-                        st.session_state.image_captured = False
-                        st.session_state.image_path = None
-                        st.session_state.webrtc_key = f"webrtc_{uuid.uuid4().hex}"
-                        st.rerun()
-                else:
-                    st_error("Captured image file missing. Please capture again.")
-                    st.session_state.image_captured = False
-                    st.session_state.image_path = None
-                    if st.button("Go back to Camera", key="back_to_camera_btn"):
-                        st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('<div class="tab-content">', unsafe_allow_html=True)
+            st_warning("Camera functionality is not supported on Streamlit Cloud. Please use image/PDF upload.")
+            st.markdown('</div>', unsafe_allow_html=True)
 
         if st.session_state.image_path and st.session_state.image_captured and st.session_state.selected_history_item_index is None:
             st.markdown("---")
@@ -926,14 +658,14 @@ def main():
                             st.markdown('<div class="image-container">', unsafe_allow_html=True)
                             st.image(subject_cropped, caption="Subject Code", use_container_width=True)
                             st.markdown('</div>', unsafe_allow_html=True)
-                            get_image_download_button(subject_cropped, 'subject_code_crop.jpg', 'Download Subject Code Croped Image')
+                            get_image_download_button(subject_cropped, "subject_code_crop.jpg", "Download Subject Code Cropped Image")
                         if not register_cropped and not subject_cropped:
-                            st_info("No regions cropped....")
+                            st_info("No regions cropped.")
                 except Exception as e:
                     progress_bar.empty()
                     status_placeholder.empty()
                     st_error(f"An unexpected error occurred during processing: {e}")
-                    st_info("Please try again with a different image.")
+                    st_info("Please try again with a different image or PDF.")
         st.markdown('</div>', unsafe_allow_html=True)
 
     elif selected_tab == "History":
@@ -959,7 +691,7 @@ def main():
                         <p><strong>Results:</strong> {results_summary}</p>
                         <p><strong>Processing Time:</strong> {processing_time:.2f} sec</p>
                     </div>
-                    """, untrue_allow_html=True)
+                    """, unsafe_allow_html=True)
                 with hist_cols[1]:
                     if st.button("View Details", key=f"view_history_{i}"):
                         st.session_state.selected_history_item_index = i
@@ -1047,7 +779,7 @@ def main():
             <ul>
                 <li><b>Object Detection:</b> A custom-trained YOLOv8 model identifies the locations of the relevant fields (Register Number, Subject Code) on the sheet.</li>
                 <li><b>Text Recognition (OCR):</b> Convolutional Recurrent Neural Network (CRNN) models are employed to read the characters within the detected regions. Separate CRNN models are optimized for recognizing digits (Register Number) and alphanumeric characters (Subject Code).</li>
-                <li><b>Web Interface:</b> Built with Streamlit, providing an interactive user interface for image upload, camera capture, and results visualization.</li>
+                <li><b>Web Interface:</b> Built with Streamlit, providing an interactive user interface for image/PDF upload and results visualization.</li>
             </ul>
             """, unsafe_allow_html=True)
 
@@ -1056,10 +788,9 @@ def main():
         st.markdown("""
         <ol>
             <li>Navigate to the <b>Scan</b> tab.</li>
-            <li>Choose your input method: <b>Upload Image</b> or <b>Use Camera</b>.</li>
-            <li>If uploading, select a clear image of the answer sheet.</li>
-            <li>If using the camera, position the sheet clearly and click <b>Capture Image</b>.</li>
-            <li>Once an image is loaded or captured, click <b>Extract Information</b>.</li>
+            <li>Choose <b>Upload Image/PDF</b> (camera not supported on Streamlit Cloud).</li>
+            <li>Upload a clear image or PDF of the answer sheet.</li>
+            <li>Click <b>Extract Information</b>.</li>
             <li>View the extracted text, detection overlays, and cropped regions.</li>
             <li>Check the <b>History</b> tab to review past scans.</li>
         </ol>
@@ -1069,15 +800,14 @@ def main():
         st.markdown("<h6>Model Information:</h6>", unsafe_allow_html=True)
         st.markdown("""
         <ul>
-            <li>The models require specific weights files (<code>improved_weights.pt</code>, <code>weights.pt</code>, <code>best_crnn_model.pth</code>, <code>best_subject_code_model.pth</code>) to be present in the same directory as the script.</li>
-            <li>Accuracy is dependent on the quality of the input image (clarity, lighting, angle) and the training data used for the models.</li>
-            <li>If model files are missing, dummy files are created for testing. Replace them with trained model weights for production use.</li>
+            <li>The models require specific weights files (<code>improved_weights.pt</code>, <code>weights.pt</code>, <code>best_crnn_model.pth</code>, <code>best_subject_code_model.pth</code>) in the <code>models</code> directory.</li>
+            <li>Accuracy depends on image/PDF quality and model training data.</li>
         </ul>
         """, unsafe_allow_html=True)
 
         st.markdown("---")
         st.markdown("<h6>Disclaimer:</h6>", unsafe_allow_html=True)
-        st_warning("This tool is for demonstration or assistive purposes. Extracted results should always be verified for accuracy, especially in critical applications.")
+        st_warning("This tool is for demonstration purposes. Verify extracted results for accuracy in critical applications.")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
