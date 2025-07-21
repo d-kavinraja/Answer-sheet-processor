@@ -1,70 +1,48 @@
-import smtplib
+# services.py
 import random
-import string
+import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import logging
+from config import EMAIL_USER, EMAIL_PASSWORD, SMTP_SERVER, SMTP_PORT
 
-logger = logging.getLogger(__name__)
+def generate_otp(n_digits=6):
+    """Generates a random n-digit OTP."""
+    return "".join([str(random.randint(0, 9)) for _ in range(n_digits)])
 
-class EmailService:
-    """Handles sending emails for OTP verification and user communication."""
-    def __init__(self, smtp_server: str, smtp_port: int, email_user: str, email_password: str):
-        self.smtp_server = smtp_server
-        self.smtp_port = smtp_port
-        self.email_user = email_user
-        self.email_password = email_password
+def send_verification_email(recipient_email, otp):
+    """Sends an email with the OTP to the specified recipient."""
+    if not EMAIL_USER or not EMAIL_PASSWORD:
+        return False, "Email service is not configured."
 
-    def generate_otp(self) -> str:
-        """Generate a 6-digit numeric OTP."""
-        return "".join(random.choices(string.digits, k=6))
+    message = MIMEMultipart("alternative")
+    message["Subject"] = "Your Verification Code for Smart Scanner"
+    message["From"] = EMAIL_USER
+    message["To"] = recipient_email
 
-    def send_otp(self, recipient_email: str, otp: str, username: str):
-        """Sends a formatted OTP email to the recipient."""
-        msg = MIMEMultipart()
-        msg['From'] = self.email_user
-        msg['To'] = recipient_email
-        msg['Subject'] = "Smart Answer Sheet Scanner - Verify Your Email"
-        body = f"""
-        <html><body><div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-        <h2 style="color: #2E86AB; text-align: center;">📝 Smart Answer Sheet Scanner</h2>
-        <h3 style="color: #333;">Email Verification Required</h3>
-        <p>Hello <strong>{username}</strong>,</p>
-        <p>Thank you for signing up! To secure your account, please use the following One-Time Password (OTP):</p>
-        <div style="background-color: #f8f9fa; padding: 20px; text-align: center; margin: 20px 0;"><h2 style="color: #2E86AB; font-size: 32px; letter-spacing: 5px; margin: 0;">{otp}</h2></div>
-        <p>This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
-        </div></body></html>
-        """
-        msg.attach(MIMEText(body, 'html'))
-        try:
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.email_user, self.email_password)
-                server.send_message(msg)
-        except smtplib.SMTPAuthenticationError as e:
-            logger.error(f"SMTP Auth Error: {e}. Check credentials/App Password.")
-            raise Exception("Failed to send OTP due to an authentication error.")
-        except Exception as e:
-            logger.error(f"General error sending OTP: {e}")
-            raise Exception(f"Failed to send OTP: {e}")
+    text = f"Hi,\n\nYour OTP is: {otp}\n\nThis code will expire in 10 minutes.\n\nThank you!"
+    html = f"""
+    <html>
+    <body>
+        <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
+        <h2>Verification Code</h2>
+        <p>Please use the following One-Time Password (OTP) to complete your action:</p>
+        <p style="font-size: 24px; font-weight: bold; letter-spacing: 2px; background-color:#f0f0f0; padding: 10px 20px; border-radius: 5px; display: inline-block;">{otp}</p>
+        <p>This code is valid for 10 minutes.</p>
+        <hr>
+        <p style="font-size: 0.9em; color: #777;">If you did not request this, please ignore this email.</p>
+        </div>
+    </body>
+    </html>
+    """
+    message.attach(MIMEText(text, "plain"))
+    message.attach(MIMEText(html, "html"))
 
-    def send_welcome_email(self, recipient_email: str, username: str):
-        """Send a welcome email after successful verification."""
-        msg = MIMEMultipart()
-        msg['From'] = self.email_user
-        msg['To'] = recipient_email
-        msg['Subject'] = "Welcome to the Smart Answer Sheet Scanner!"
-        body = f"""
-        <html><body><div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-        <h2 style="color: #2E86AB; text-align: center;">🎉 Welcome, {username}!</h2>
-        <p>Your account is verified. You can now use the <strong>Smart Answer Sheet Scanner</strong> to process answer sheets, capture them via camera, and view your scan history.</p>
-        </div></body></html>
-        """
-        msg.attach(MIMEText(body, 'html'))
-        try:
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.email_user, self.email_password)
-                server.send_message(msg)
-        except Exception as e:
-            logger.error(f"Failed to send welcome email to {recipient_email}: {e}")
+    try:
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(EMAIL_USER, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_USER, recipient_email, message.as_string())
+        server.quit()
+        return True, "Email sent successfully."
+    except Exception as e:
+        return False, f"Failed to send email: {e}"

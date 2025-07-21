@@ -1,46 +1,36 @@
-import torch.nn as nn
+# models.py
+import hashlib
+import os
+from config import HASH_SECRET_KEY
 
-class CRNN(nn.Module):
-    def __init__(self, num_classes):
-        super(CRNN, self).__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2),
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2),
-            nn.Dropout2d(0.3),
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 1), (2, 1)),
-            nn.Conv2d(256, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 1), (2, 1)),
-            nn.Dropout2d(0.3),
-            nn.Conv2d(512, 512, kernel_size=(2, 1)),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-        )
-        self.rnn = nn.LSTM(512, 256, num_layers=2, bidirectional=True, dropout=0.3)
-        self.dropout = nn.Dropout(0.5)
-        self.fc = nn.Linear(512, num_classes)
+def hash_password(password, salt=None):
+    """Hashes a password with a salt using PBKDF2."""
+    if salt is None:
+        salt = os.urandom(16)  # Generate a new random salt
+    
+    # Use PBKDF2 for password hashing
+    hashed_password = hashlib.pbkdf2_hmac(
+        'sha256',
+        password.encode('utf-8'),
+        salt,
+        100000, # Number of iterations
+        dklen=128
+    )
+    # Return salt and hash, so we can store both
+    return salt, hashed_password
 
-    def forward(self, x):
-        x = self.cnn(x)
-        x = x.squeeze(2)
-        x = x.permute(2, 0, 1)
-        x, _ = self.rnn(x)
-        x = self.dropout(x)
-        x = self.fc(x)
-        return x
+def verify_password(stored_salt, stored_hash, provided_password):
+    """Verifies a provided password against a stored salt and hash."""
+    # Hash the provided password with the stored salt
+    _, hashed_password_to_check = hash_password(provided_password, stored_salt)
+    return stored_hash == hashed_password_to_check
+
+# User Schema for MongoDB:
+# {
+#     "email": TEXT (unique),
+#     "salt": BINARY,
+#     "password_hash": BINARY,
+#     "is_verified": BOOLEAN,
+#     "otp": TEXT,
+#     "otp_expiry": DATETIME
+# }

@@ -1,65 +1,68 @@
-from pymongo import MongoClient
-import bcrypt
+# database.py
+import pymongo
 from datetime import datetime, timedelta
-import logging
+from config import MONGO_URI, OTP_VALIDITY_MINUTES, DB_NAME
+from models import hash_password, verify_password
 
-logger = logging.getLogger(__name__)
-
-class MongoManager:
-    def __init__(self, mongo_uri: str):
-        self.client = MongoClient(mongo_uri)
-        self.db = self.client["answer_sheet_scanner"]
-        self.users = self.db["users"]
-        self.scans = self.db["scans"]
-        self.users.create_index("email", unique=True)
-
-    def create_user(self, user_data: dict) -> bool:
-        """Create a new user with a hashed password."""
-        try:
-            if self.users.find_one({"email": user_data["email"]}):
-                return False
-            hashed_password = bcrypt.hashpw(user_data["password"].encode("utf-8"), bcrypt.gensalt())
-            user_data["password"] = hashed_password
-            user_data["created_at"] = datetime.utcnow()
-            user_data["verified"] = False
-            self.users.insert_one(user_data)
-            return True
-        except Exception as e:
-            logger.error(f"Error creating user: {e}")
-            return False
-
-    def verify_user(self, email: str, password: str) -> dict:
-        """Verify user credentials and return user data if valid."""
-        user = self.users.find_one({"email": email})
-        if user and bcrypt.checkpw(password.encode("utf-8"), user["password"]):
-            return user
+def get_db_connection():
+    """Establishes a connection to MongoDB and returns the database object."""
+    try:
+        client = pymongo.MongoClient(MONGO_URI)
+        # Ping to confirm connection
+        client.admin.command('ping')
+        return client[DB_NAME]
+    except Exception as e:
+        print(f"Error connecting to MongoDB: {e}")
         return None
 
-    def save_otp(self, email: str, otp: str):
-        """Save OTP and its timestamp for a user."""
-        self.users.update_one(
+def find_user_by_email(email):
+    """Finds a user by their email address."""
+    db = get_db_connection()
+    if db is None: return None
+    return db.users.find_one({"email": email})
+
+def add_user(email, password, otp):
+    """Adds a new, unverified user to the database."""
+    db = get_db_connection()
+    if db is None: return False
+    
+    salt, hashed_pw = hash_password(password)
+    expiry_time = datetime.now() + timedelta(minutes=OTP_VALIDITY_MINUTES)
+    
+    try:
+        db.users.insert_one({
+            "email": email,
+            "salt": salt,
+            "password_hash": hashed_pw,
+            "is_verified": False,
+            "otp": otp,
+            "otp_expiry": expiry_time
+        })
+        return True
+    except pymongo.errors.DuplicateKeyError:
+        return False
+
+def update_otp_for_user(email, otp):
+    """Updates the OTP for an existing user."""
+    db = get_db_connection()
+    if db is None: return
+    
+    expiry_time = datetime.now() + timedelta(minutes=OTP_VALIDITY_MINUTES)
+    db.users.update_one(
+        {"email": email},
+        {"$set": {"otp": otp, "otp_expiry": expiry_time}}
+    )
+
+def verify_user_otp(email, otp):
+    """Verifies a user's OTP and marks them as verified."""
+    db = get_db_connection()
+    if db is None: return False
+    
+    user = db.users.find_one({"email": email})
+    if user and user['otp'] == otp and datetime.now() < user['otp_expiry']:
+        db.users.update_one(
             {"email": email},
-            {"$set": {"otp": otp, "otp_timestamp": datetime.utcnow()}}
+            {"$set": {"is_verified": True, "otp": None, "otp_expiry": None}}
         )
-
-    def verify_otp(self, email: str, otp: str) -> dict:
-        """Verify OTP. If valid and not expired, mark user as verified and return user."""
-        user = self.users.find_one({"email": email, "otp": otp})
-        if user:
-            otp_time = user.get("otp_timestamp", datetime.min)
-            if (datetime.utcnow() - otp_time) < timedelta(minutes=10):
-                self.users.update_one(
-                    {"email": email},
-                    {"$set": {"verified": True}, "$unset": {"otp": "", "otp_timestamp": ""}}
-                )
-                return user
-        return None
-
-    def save_scan(self, email: str, history_item: dict):
-        """Save a complete scan result (history item) to the database."""
-        scan_data = {"email": email, "history_item": history_item}
-        self.scans.insert_one(scan_data)
-
-    def get_user_scans(self, email: str) -> list:
-        """Retrieve all scans for a user, sorted by date."""
-        return list(self.scans.find({"email": email}).sort("history_item.timestamp", -1))
+        return True
+    return False
