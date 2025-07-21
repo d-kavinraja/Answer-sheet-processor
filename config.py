@@ -1,20 +1,27 @@
-import streamlit as st
+import toml
+import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 def load_secrets():
-    """
-    Loads secrets from Streamlit's secrets manager.
-    Returns a dictionary of secrets or stops the app if critical keys are missing.
-    """
+    """Load secrets from .streamlit/secrets.toml or environment variables."""
+    logger.debug("Loading secrets")
     try:
-        secrets = {
-            "MONGO_URI": st.secrets["MONGO_URI"],
-            "SMTP_SERVER": st.secrets["SMTP_SERVER"],
-            "SMTP_PORT": st.secrets["SMTP_PORT"],
-            "EMAIL_USER": st.secrets["EMAIL_USER"],
-            "EMAIL_PASSWORD": st.secrets["EMAIL_PASSWORD"],
-        }
-        return secrets
-    except (FileNotFoundError, KeyError) as e:
-        st.error("🚨 Critical Error: API keys or secrets are missing. Please configure your .streamlit/secrets.toml file.")
-        st.error(f"Missing configuration: {e}")
-        st.stop()
+        if os.path.exists(".streamlit/secrets.toml"):
+            secrets = toml.load(".streamlit/secrets.toml")
+            logger.debug("Secrets loaded from secrets.toml")
+            return secrets
+        else:
+            secrets = {
+                "MONGO_URI": os.environ.get("MONGO_URI"),
+                "SMTP_SERVER": os.environ.get("SMTP_SERVER"),
+                "SMTP_PORT": int(os.environ.get("SMTP_PORT", 587)),
+                "EMAIL_USER": os.environ.get("EMAIL_USER"),
+                "EMAIL_PASSWORD": os.environ.get("EMAIL_PASSWORD")
+            }
+            logger.debug("Secrets loaded from environment variables")
+            return secrets
+    except Exception as e:
+        logger.error(f"Error loading secrets: {str(e)}")
+        raise Exception(f"Failed to load secrets: {str(e)}")
