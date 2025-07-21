@@ -7,8 +7,6 @@ from ultralytics import YOLO
 from PIL import Image
 from torchvision import transforms
 import torch.nn as nn
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
-import av
 import uuid
 import time
 from streamlit_option_menu import option_menu
@@ -56,22 +54,17 @@ def local_css():
         .footer a { color: var(--primary-color) !important; text-decoration: none; transition: color 0.3s; }
         .footer a:hover { filter: brightness(85%); text-decoration: underline; }
         .footer-content { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-        .camera-controls { display: flex; justify-content: center; gap: 20px; margin-top: 15px; }
-        .camera-controls .stButton>button { padding: 1rem 2rem; font-size: 1.2rem; }
-        .stProgress > div > div > div > div { background-color: var(--primary-color) !important; }
         .input-buttons-col { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; max-width: 250px; margin-left: auto; margin-right: auto; }
         .extracted-output { background-color: var(--secondary-background-color); border: 2px solid var(--primary-color); border-radius: 10px; padding: 15px; margin-top: 20px; font-family: 'Courier New', Courier, monospace; color: var(--text-color); }
         .image-comparison-container { width: 100%; max-width: 600px; margin: 0 auto; }
         @media (max-width: 768px) {
             .footer { padding: 15px; font-size: 0.8rem; }
             .footer-content { flex-direction: column; gap: 8px; }
-            .camera-controls { flex-direction: column; gap: 10px; }
-            .camera-controls .stButton>button { padding: 0.75rem 1.5rem; font-size: 1rem; }
             .input-buttons-col { max-width: 100%; }
         }
         @media (max-width: 480px) {
             .footer { padding: 10px; font-size: 0.7rem; }
-            .camera-controls .stButton>button { padding: 0.5rem 1rem; font-size: 0.9rem; }
+            .stButton>button { padding: 0.5rem 1rem; font-size: 0.9rem; }
         }
     </style>
     """, unsafe_allow_html=True)
@@ -89,8 +82,6 @@ if 'processing_start_time' not in st.session_state:
     st.session_state.processing_start_time = None
 if 'selected_history_item_index' not in st.session_state:
     st.session_state.selected_history_item_index = None
-if 'webrtc_key' not in st.session_state:
-    st.session_state.webrtc_key = f"webrtc_{uuid.uuid4().hex}"
 if 'input_method' not in st.session_state:
     st.session_state.input_method = "Upload Image"
 
@@ -156,7 +147,7 @@ def load_extractor():
         model_files = [yolo_improved_path, yolo_fallback_path, register_crnn_path, subject_crnn_path]
         for p in model_files:
             if not os.path.exists(p):
-                st.warning(f"Model file {p} not found. Please ensure model weights are included in the 'models' directory.")
+                st.error(f"Model file {p} not found. Please ensure model weights are in the 'models' directory.")
                 return None
 
         extractor = AnswerSheetExtractor(
@@ -175,7 +166,7 @@ def load_extractor():
 class AnswerSheetExtractor:
     def __init__(self, yolo_improved_weights_path, yolo_fallback_weights_path, register_crnn_model_path, subject_crnn_model_path):
         script_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
-        for dir_name in ["cropped_register_numbers", "cropped_subject_codes", "results", "uploads", "captures"]:
+        for dir_name in ["cropped_register_numbers", "cropped_subject_codes", "results", "Uploads"]:
             os.makedirs(os.path.join(script_dir, dir_name), exist_ok=True)
         self.script_dir = script_dir
 
@@ -382,45 +373,6 @@ class AnswerSheetExtractor:
 
         return results, best_register_cropped_path, best_subject_cropped_path, best_overlay, processing_time
 
-# WebRTC configuration
-RTC_CONFIGURATION = RTCConfiguration(
-    {"iceServers": [
-        {"urls": ["stun:stun.l.google.com:19302"]},
-        {"urls": ["stun:stun1.l.google.com:19302"]}
-    ]}
-)
-
-# Video processor class
-class VideoProcessor:
-    def __init__(self):
-        self.frame = None
-        self.last_frame_time = time.time()
-        self.fps = 0
-        self.frame_count = 0
-        self.last_processed = 0
-        self.process_interval = 0.05
-
-    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-        current_time = time.time()
-        img = frame.to_ndarray(format="bgr24")
-        self.frame = img
-        self.last_processed = current_time
-        self.frame_count += 1
-        if current_time - self.last_frame_time >= 1.0:
-            self.fps = self.frame_count / (current_time - self.last_frame_time)
-            self.last_frame_time = current_time
-            self.frame_count = 0
-
-        cv2.putText(img, f"FPS: {self.fps:.1f}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        h, w = img.shape[:2]
-        center_x, center_y = w//2, h//2
-        cv2.line(img, (center_x - 15, center_y), (center_x + 15, center_y), (0, 0, 255), 2)
-        cv2.line(img, (center_x, center_y - 15), (center_x, center_y + 15), (0, 0, 255), 2)
-        cv2.putText(img, "Align Sheet & Capture", (center_x - 100, h - 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-        return av.VideoFrame.from_ndarray(img, format="bgr24")
-
 # Colored text boxes
 def st_success(text):
     st.markdown(f'<div class="success-box">{text}</div>', unsafe_allow_html=True)
@@ -513,85 +465,69 @@ def main():
 
     if selected_tab == "Scan":
         st.markdown('<div class="tab-content">', unsafe_allow_html=True)
-        st.markdown("<h3>Choose input method:</h3>", unsafe_allow_html=True)
+        st.markdown("<h3>Upload Image or PDF</h3>", unsafe_allow_html=True)
 
         st.markdown('<div class="input-buttons-col">', unsafe_allow_html=True)
         if st.button("⬆️ Upload Image/PDF", key="upload_image_btn"):
-            st.session_state.input_method = "Upload Image"
             st.session_state.image_path = None
             st.session_state.image_captured = False
             st.session_state.selected_history_item_index = None
-            st.rerun()
-        if st.button("📸 Use Camera", key="use_camera_btn"):
-            st.session_state.input_method = "Use Camera"
-            st.session_state.image_path = None
-            st.session_state.image_captured = False
-            st.session_state.selected_history_item_index = None
-            st.session_state.webrtc_key = f"webrtc_{uuid.uuid4().hex}"
             st.rerun()
         if st.button("🔄 Reset Scan", key="reset_btn_scan"):
             st.session_state.image_path = None
             st.session_state.image_captured = False
             st.session_state.selected_history_item_index = None
-            st.session_state.webrtc_key = f"webrtc_{uuid.uuid4().hex}"
-            st.session_state.input_method = "Upload Image"
-            st_info("Scan reset. Upload an image/PDF or use the camera.")
+            st_info("Scan reset. Upload an image or PDF.")
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-        if st.session_state.input_method == "Upload Image":
-            with st.container():
-                st.markdown('<div class="camera-container">', unsafe_allow_html=True)
-                uploaded_file = st.file_uploader(
-                    "Upload Answer Sheet Image or PDF",
-                    type=["png", "jpg", "jpeg", "pdf"],
-                    key="uploader",
-                    label_visibility="collapsed"
-                )
-                if uploaded_file:
-                    file_extension = uploaded_file.name.split('.')[-1].lower()
-                    uploads_dir = os.path.join(script_dir, "uploads")
-                    os.makedirs(uploads_dir, exist_ok=True)
-                    temp_path = os.path.join(uploads_dir, f"image_{uuid.uuid4().hex}.jpg")
-                    try:
-                        if file_extension == "pdf":
-                            with st.spinner("Converting PDF to image..."):
-                                images = convert_from_bytes(uploaded_file.read(), first_page=1, last_page=1)
-                                if images:
-                                    images[0].save(temp_path, "JPEG")
-                                    logger.info("PDF converted to image successfully")
-                                else:
-                                    st_error("Failed to convert PDF to image.")
-                                    st.session_state.image_path = None
-                                    st.session_state.image_captured = False
-                                    st.markdown('</div>', unsafe_allow_html=True)
-                                    return
-                        else:
-                            with open(temp_path, "wb") as f:
-                                f.write(uploaded_file.getbuffer())
-                        st.session_state.image_path = temp_path
-                        st.session_state.image_captured = True
-                        st.session_state.selected_history_item_index = None
-                        st.markdown('<div class="image-container">', unsafe_allow_html=True)
-                        st.image(st.session_state.image_path, caption="Uploaded Image", use_container_width=True)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    except Exception as e:
-                        logger.error(f"Error processing file: {e}")
-                        st_error(f"Error processing file: {e}")
-                        st.session_state.image_path = None
-                        st.session_state.image_captured = False
-                elif not st.session_state.image_path or not st.session_state.image_captured:
-                    st.markdown("""
-                    <div style="border: 2px dashed #ccc; border-radius: 5px; padding: 40px 20px; margin-top: 10px;">
-                        <h3>Drag & drop or click to upload</h3>
-                        <p>Supported formats: JPG, PNG, JPEG, PDF</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        else:  # Use Camera
-            st.markdown('<div class="tab-content">', unsafe_allow_html=True)
-            st_warning("Camera functionality is not supported on Streamlit Cloud. Please use image/PDF upload.")
+        with st.container():
+            st.markdown('<div class="camera-container">', unsafe_allow_html=True)
+            uploaded_file = st.file_uploader(
+                "Upload Answer Sheet Image or PDF",
+                type=["png", "jpg", "jpeg", "pdf"],
+                key="uploader",
+                label_visibility="collapsed"
+            )
+            if uploaded_file:
+                file_extension = uploaded_file.name.split('.')[-1].lower()
+                uploads_dir = os.path.join(script_dir, "Uploads")
+                os.makedirs(uploads_dir, exist_ok=True)
+                temp_path = os.path.join(uploads_dir, f"image_{uuid.uuid4().hex}.jpg")
+                try:
+                    if file_extension == "pdf":
+                        with st.spinner("Converting PDF to image..."):
+                            images = convert_from_bytes(uploaded_file.read(), first_page=1, last_page=1)
+                            if images:
+                                images[0].save(temp_path, "JPEG")
+                                logger.info(f"PDF converted to image: {temp_path}")
+                            else:
+                                st_error("Failed to convert PDF to image. Please ensure the PDF is valid.")
+                                st.session_state.image_path = None
+                                st.session_state.image_captured = False
+                                st.markdown('</div>', unsafe_allow_html=True)
+                                return
+                    else:
+                        with open(temp_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+                    st.session_state.image_path = temp_path
+                    st.session_state.image_captured = True
+                    st.session_state.selected_history_item_index = None
+                    st.markdown('<div class="image-container">', unsafe_allow_html=True)
+                    st.image(st.session_state.image_path, caption="Uploaded Image", use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    logger.error(f"Error processing file: {e}")
+                    st_error(f"Error processing file: {e}")
+                    st.session_state.image_path = None
+                    st.session_state.image_captured = False
+            elif not st.session_state.image_path or not st.session_state.image_captured:
+                st.markdown("""
+                <div style="border: 2px dashed #ccc; border-radius: 5px; padding: 40px 20px; margin-top: 10px;">
+                    <h3>Drag & drop or click to upload</h3>
+                    <p>Supported formats: JPG, PNG, JPEG, PDF</p>
+                </div>
+                """, unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
         if st.session_state.image_path and st.session_state.image_captured and st.session_state.selected_history_item_index is None:
@@ -788,8 +724,7 @@ def main():
         st.markdown("""
         <ol>
             <li>Navigate to the <b>Scan</b> tab.</li>
-            <li>Choose <b>Upload Image/PDF</b> (camera not supported on Streamlit Cloud).</li>
-            <li>Upload a clear image or PDF of the answer sheet.</li>
+            <li>Upload a clear image or PDF of the answer sheet (first page used for PDFs).</li>
             <li>Click <b>Extract Information</b>.</li>
             <li>View the extracted text, detection overlays, and cropped regions.</li>
             <li>Check the <b>History</b> tab to review past scans.</li>
