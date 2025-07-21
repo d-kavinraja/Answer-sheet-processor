@@ -14,8 +14,12 @@ class MongoManager:
         """Create a new user with hashed password."""
         try:
             # Check if username or email already exists
-            if self.users.find_one({"$or": [{"username": user_data["username"], "email": user_data["email"]}]):
+            if self.users.find_one({"$or": [
+                {"username": user_data["username"]},
+                {"email": user_data["email"]}
+            ]}):
                 return False
+
             # Hash password
             hashed_password = bcrypt.hashpw(user_data["password"].encode("utf-8"), bcrypt.gensalt())
             user_data["password"] = hashed_password
