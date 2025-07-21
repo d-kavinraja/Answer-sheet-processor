@@ -1,7 +1,7 @@
 streamlit
 streamlit-webrtc
 streamlit-image-comparison
-opencv-python
+opencv-python-headless
 ultralytics
 torch
 torchvision
