@@ -811,7 +811,7 @@ def main():
                     <p>Supported formats: JPG, PNG, JPEG, PDF (first page will be processed)</p>
                 </div>
                 """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
         else:  # Use Camera
             with st.container():
