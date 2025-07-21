@@ -1,122 +1,85 @@
-import streamlit as st
-import pymongo
+from pymongo import MongoClient
 import bcrypt
-import datetime
-from datetime import timedelta
-from typing import List, Dict
+from datetime import datetime
 
 class MongoManager:
-    def __init__(self, uri: str):
+    def __init__(self, mongo_uri: str):
+        """Initialize MongoDB connection."""
+        self.client = MongoClient(mongo_uri)
+        self.db = self.client["answer_sheet_scanner"]
+        self.users = self.db["users"]
+        self.scans = self.db["scans"]
+
+    def create_user(self, user_data: dict) -> bool:
+        """Create a new user with hashed password."""
         try:
-            self.client = pymongo.MongoClient(uri)
-            self.client.admin.command('ping')
-            self.db = self.client["smart_answer_sheet_scanner"]
-            self.users_collection = self.db["users"]
-            self.otp_collection = self.db["otp_verifications"]
-            self.scans_collection = self.db["scans"]
-            self.users_collection.create_index("username", unique=True)
-            self.users_collection.create_index("email", unique=True)
-            self.otp_collection.create_index("expires_at", expireAfterSeconds=0)
-            self.scans_collection.create_index([("username", pymongo.ASCENDING), ("timestamp", pymongo.DESCENDING)])
-        except pymongo.errors.ConnectionFailure as e:
-            st.error(f"Database connection failed: {e}", icon="🚨")
-            st.stop()
-        except Exception as e:
-            st.error(f"An error occurred with the database setup: {e}", icon="🚨")
-            st.stop()
-
-    def _hash_password(self, password: str) -> bytes:
-        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-
-    def check_password(self, password: str, hashed: bytes) -> bool:
-        return bcrypt.checkpw(password.encode('utf-8'), hashed)
-
-    def add_user(self, username: str, email: str, password: str) -> Dict:
-        if self.users_collection.find_one({"username": username}):
-            return {"success": False, "message": "Username already exists"}
-        if self.users_collection.find_one({"email": email}):
-            return {"success": False, "message": "Email already registered"}
-        hashed_password = self._hash_password(password)
-        user_data = {
-            "username": username,
-            "email": email,
-            "password_hash": hashed_password,
-            "email_verified": False,
-            "created_at": datetime.datetime.now(datetime.UTC),
-            "last_login": None
-        }
-        self.users_collection.insert_one(user_data)
-        return {"success": True, "message": "User created successfully"}
-
-    def find_user(self, username: str) -> Dict | None:
-        return self.users_collection.find_one({"username": username})
-
-    def find_user_by_email(self, email: str) -> Dict | None:
-        return self.users_collection.find_one({"email": email})
-
-    def store_otp(self, email: str, otp: str) -> bool:
-        try:
-            self.otp_collection.delete_many({"email": email})
-            otp_data = {
-                "email": email,
-                "otp": otp,
-                "created_at": datetime.datetime.now(datetime.UTC),
-                "expires_at": datetime.datetime.now(datetime.UTC) + timedelta(minutes=10),
-                "attempts": 0
-            }
-            self.otp_collection.insert_one(otp_data)
+            # Check if username or email already exists
+            if self.users.find_one({"$or": [{"username": user_data["username"], "email": user_data["email"]}]):
+                return False
+            # Hash password
+            hashed_password = bcrypt.hashpw(user_data["password"].encode("utf-8"), bcrypt.gensalt())
+            user_data["password"] = hashed_password
+            user_data["created_at"] = datetime.utcnow()
+            self.users.insert_one(user_data)
             return True
         except Exception as e:
-            st.error(f"Failed to store OTP: {str(e)}")
+            print(f"Error creating user: {str(e)}")
             return False
 
-    def verify_otp(self, email: str, otp: str) -> Dict:
+    def verify_user(self, email: str, password: str) -> dict:
+        """Verify user credentials and return user data."""
         try:
-            otp_record = self.otp_collection.find_one({"email": email})
-            if not otp_record:
-                return {"success": False, "message": "No OTP found for this email"}
-            if datetime.datetime.now(datetime.UTC) > otp_record["expires_at"].replace(tzinfo=datetime.UTC):
-                self.otp_collection.delete_one({"email": email})
-                return {"success": False, "message": "OTP has expired. Please request a new one"}
-            if otp_record["attempts"] >= 3:
-                self.otp_collection.delete_one({"email": email})
-                return {"success": False, "message": "Too many failed attempts. Please request a new OTP"}
-            if otp_record["otp"] == otp:
-                self.users_collection.update_one(
-                    {"email": email},
-                    {"$set": {"email_verified": True}}
-                )
-                self.otp_collection.delete_one({"email": email})
-                return {"success": True, "message": "Email verified successfully"}
-            else:
-                self.otp_collection.update_one(
-                    {"email": email},
-                    {"$inc": {"attempts": 1}}
-                )
-                remaining_attempts = 3 - (otp_record["attempts"] + 1)
-                return {
-                    "success": False,
-                    "message": f"Invalid OTP. {remaining_attempts} attempts remaining"
-                }
+            user = self.users.find_one({"email": email})
+            if user and bcrypt.checkpw(password.encode("utf-8"), user["password"]):
+                return user
+            return None
         except Exception as e:
-            st.error(f"Error verifying OTP: {str(e)}")
-            return {"success": False, "message": "Verification failed due to system error"}
+            print(f"Error verifying user: {str(e)}")
+            return None
 
-    def update_last_login(self, username: str):
-        self.users_collection.update_one(
-            {"username": username},
-            {"$set": {"last_login": datetime.datetime.now(datetime.UTC)}}
-        )
-
-    def store_scan_result(self, username: str, scan_data: Dict):
+    def save_otp(self, email: str, otp: str):
+        """Save OTP for email verification."""
         try:
-            scan_data["username"] = username
-            scan_data["timestamp"] = datetime.datetime.now(datetime.UTC)
-            self.scans_collection.insert_one(scan_data)
-            return {"success": True, "message": "Scan result stored successfully"}
+            self.users.update_one(
+                {"email": email},
+                {"$set": {"otp": otp, "otp_timestamp": datetime.utcnow()}},
+                upsert=True
+            )
         except Exception as e:
-            st.error(f"Failed to store scan result: {str(e)}")
-            return {"success": False, "message": "Failed to store scan result"}
+            print(f"Error saving OTP: {str(e)}")
 
-    def get_user_scans(self, username: str) -> List[Dict]:
-        return list(self.scans_collection.find({"username": username}).sort("timestamp", pymongo.DESCENDING))
+    def verify_otp(self, email: str, otp: str) -> bool:
+        """Verify OTP and mark user as verified."""
+        try:
+            user = self.users.find_one({"email": email, "otp": otp})
+            if user:
+                self.users.update_one(
+                    {"email": email},
+                    {"$set": {"verified": True}, "$unset": {"otp": "", "otp_timestamp": ""}}
+                )
+                return True
+            return False
+        except Exception as e:
+            print(f"Error verifying OTP: {str(e)}")
+            return False
+
+    def save_scan(self, email: str, image_path: str, results: list):
+        """Save scan results to the database."""
+        try:
+            scan_data = {
+                "email": email,
+                "image_path": image_path,
+                "results": results,
+                "timestamp": datetime.utcnow()
+            }
+            self.scans.insert_one(scan_data)
+        except Exception as e:
+            print(f"Error saving scan: {str(e)}")
+
+    def get_user_scans(self, email: str) -> list:
+        """Retrieve all scans for a user."""
+        try:
+            return list(self.scans.find({"email": email}).sort("timestamp", -1))
+        except Exception as e:
+            print(f"Error retrieving scans: {str(e)}")
+            return []
