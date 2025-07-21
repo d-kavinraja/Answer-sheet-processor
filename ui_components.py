@@ -60,31 +60,38 @@ def display_header():
     <h1 style='text-align: center; color: #2E86AB;'>Smart Answer Sheet Scanner</h1>
     <p style='text-align: center; color: #666;'>Upload or capture answer sheets to extract register numbers and subject codes.</p>
     """, unsafe_allow_html=True)
+# In ui_components.py, replace the existing display_signup function with this:
 
 def display_signup(mongo_manager, email_service):
     """Display the signup form."""
     logger.debug("Rendering signup form")
     st.subheader("Create an Account")
     username = st.text_input("Username", key="signup_username")
-    email = st.text_input("Email", key="signup_email")
+    email = st.text_input("Email", key="signup_email") # Widget value is automatically in st.session_state.signup_email
     password = st.text_input("Password", type="password", key="signup_password")
+
     if st.button("Sign Up"):
         logger.debug(f"Signup attempt: username={username}, email={email}")
         if username and email and password:
             try:
                 user_data = {"username": username, "email": email, "password": password, "verified": False}
                 result = mongo_manager.create_user(user_data)
+                
                 if result:
                     otp = email_service.generate_otp()
                     mongo_manager.save_otp(email, otp)
                     email_service.send_otp(email, otp)
+                    
+                    # Set state for the next run
                     st.session_state.auth_tab = "Sign In"
-                    st.session_state.signup_email = email
                     st.session_state.pending_verification = True
+                    # The line `st.session_state.signup_email = email` has been removed.
+                    
                     logger.debug(f"Signup successful, OTP sent to {email}")
-                    st_success("Account created! Check your email for the OTP to verify. Please switch to the Sign In tab to enter your OTP.")
-
-                    st.experimental_rerun() 
+                    st_success("Account created! Check your email for the OTP to verify.")
+                    
+                    # Rerun the script to switch to the Sign In tab and show the OTP input
+                    st.experimental_rerun()
                 else:
                     logger.warning("Username or email already exists")
                     st_error("Username or email already exists.")
