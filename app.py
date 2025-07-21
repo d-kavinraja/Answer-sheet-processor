@@ -15,6 +15,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
 )
+
 logger = logging.getLogger(__name__)
 
 # Set page configuration
@@ -27,12 +28,16 @@ st.set_page_config(
 )
 
 def main():
+    """
+    The main function that runs the Streamlit application.
+    It handles initialization, user authentication, and tab navigation.
+    """
     logger.debug("Entering main() function")
     try:
-        # Load secrets
+        # Load secrets from config
         logger.debug("Loading secrets")
         secrets = load_secrets()
-        
+
         # Initialize MongoDB and EmailService
         logger.debug("Initializing MongoManager and EmailService")
         mongo_manager = MongoManager(secrets["MONGO_URI"])
@@ -42,17 +47,17 @@ def main():
             secrets["EMAIL_USER"],
             secrets["EMAIL_PASSWORD"]
         )
-        
-        # Initialize session state
+
+        # Initialize session state for user data
         logger.debug("Initializing session state")
         initialize_session_state()
-        
-        # Apply CSS and display header
+
+        # Apply CSS and display the main header
         logger.debug("Applying CSS and displaying header")
         local_css()
         display_header()
-        
-        # Authentication flow
+
+        # Authentication flow: show sign-in/sign-up if not logged in
         if not st.session_state.logged_in:
             logger.debug("Displaying authentication tabs")
             auth_tabs = option_menu(
@@ -76,6 +81,7 @@ def main():
                 }
             )
             st.session_state.auth_tab = auth_tabs
+
             if auth_tabs == "Sign Up":
                 logger.debug("Displaying signup UI")
                 display_signup(mongo_manager, email_service)
@@ -83,7 +89,7 @@ def main():
                 logger.debug("Displaying signin UI")
                 display_signin(mongo_manager, email_service)
             return
-        
+
         # Main app tabs for logged-in users
         logger.debug("Displaying main app tabs")
         selected_tab = option_menu(
@@ -106,12 +112,12 @@ def main():
                 "nav-link-selected": {"background-color": "#2E86AB", "color": "#fff"}
             }
         )
-        
-        # Load extractor
+
+        # Load the ML model extractor
         logger.debug("Loading extractor")
         extractor = load_extractor()
-        
-        # Display selected tab
+
+        # Display content based on the selected tab
         if selected_tab == "Scan":
             logger.debug("Displaying scan tab")
             display_scan_tab(extractor, mongo_manager)
@@ -121,7 +127,7 @@ def main():
         else:
             logger.debug("Displaying about tab")
             display_about_tab()
-            
+
     except Exception as e:
         logger.error(f"Error in main: {str(e)}")
         st.error(f"An error occurred: {str(e)}")
