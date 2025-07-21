@@ -4,9 +4,9 @@ streamlit-image-comparison
 opencv-python-headless
 ultralytics
 torch
-torchvision
 pdf2image
-libgl1
+torchvision
+av
 numpy
-Pillow
+pillow
 streamlit-option-menu
