@@ -17,6 +17,12 @@ from datetime import datetime
 import json
 import PyPDF2
 import pypdfium2 as pdfium
+import io
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Set page configuration
 st.set_page_config(
@@ -26,205 +32,39 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for styling with theme compatibility and mobile-friendly buttons
+# Custom CSS for styling
 def local_css():
     st.markdown("""
     <style>
-        /* Theme compatibility: Use Streamlit theme variables */
-        .stApp {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        /* Hide header button */
-        [data-testid="stHeader"] button {
-            display: none !important;
-        }
-
-        /* Button styling */
+        .stApp { max-width: 1200px; margin: 0 auto; }
+        [data-testid="stHeader"] button { display: none !important; }
         .stButton>button {
-            font-weight: 500;
-            border-radius: 10px;
-            padding: 0.75rem 1.5rem;
-            transition: all 0.3s;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            width: 100%;
-            font-size: 1.1rem;
+            font-weight: 500; border-radius: 10px; padding: 0.75rem 1.5rem; transition: all 0.3s;
+            cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+            gap: 8px; width: 100%; font-size: 1.1rem;
         }
-
-        /* Status boxes */
-        .success-box {
-            background-color: #d4edda;
-            border-color: #c3e6cb;
-            color: #155724 !important;
-            padding: 1rem;
-            border-radius: 0.25rem;
-            margin-bottom: 1rem;
-        }
-        .error-box {
-            background-color: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24 !important;
-            padding: 1rem;
-            border-radius: 0.25rem;
-            margin-bottom: 1rem;
-        }
-        .info-box {
-            background-color: #cce5ff;
-            border-color: #b8daff;
-            color: #004085 !important;
-            padding: 1rem;
-            border-radius: 0.25rem;
-            margin-bottom: 1rem;
-        }
-        .warning-box {
-            background-color: #fff3cd;
-            border-color: #ffeeba;
-            color: #856404 !important;
-            padding: 1rem;
-            border-radius: 0.25rem;
-            margin-bottom: 1rem;
-        }
-
-        /* Result card */
-        .result-card {
-            background-color: var(--secondary-background-color);
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-
-        /* Header container */
-        .header-container {
-            background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            color: var(--text-color-inverse);
-        }
-        .header-container h1, .header-container p {
-            color: var(--text-color-inverse);
-        }
-
-        /* Camera container */
-        .camera-container {
-            border: 2px dashed #ccc;
-            border-radius: 10px;
-            padding: 15px;
-            background-color: var(--secondary-background-color);
-        }
-
-        .image-container {
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-
-        /* Tab content */
-        .tab-content {
-            padding: 20px;
-            border-radius: 0 0 10px 10px;
-            background-color: var(--background-color);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-
-        /* History item */
-        .history-item {
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            background-color: var(--secondary-background-color);
-            cursor: pointer;
-            transition: all 0.3s;
-            border-left: 5px solid var(--primary-color);
-        }
-        .history-item:hover {
-            filter: brightness(95%);
-            transform: translateY(-2px);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        /* Footer */
-        .footer {
-            margin-top: 50px;
-            padding: 20px;
-            text-align: center;
-            font-size: 0.9rem;
-            background-color: var(--secondary-background-color);
-            border-radius: 10px;
-            box-shadow: 0 -2px 4px rgba(0,0,0,0.05);
-            width: 100%;
-        }
-        .footer a {
-            color: var(--primary-color) !important;
-            text-decoration: none;
-            transition: color 0.3s;
-        }
-        .footer a:hover {
-            filter: brightness(85%);
-            text-decoration: underline;
-        }
-        .footer-content {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-        }
-
-        /* Camera controls */
-        .camera-controls {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin-top: 15px;
-        }
-        .camera-controls .stButton>button {
-            padding: 1rem 2rem;
-            font-size: 1.2rem;
-        }
-
-        /* Progress bar */
-        .stProgress > div > div > div > div {
-            background-color: var(--primary-color) !important;
-        }
-
-        /* Input buttons column */
-        .input-buttons-col {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            margin-bottom: 20px;
-            max-width: 250px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        /* Extracted output */
-        .extracted-output {
-            background-color: var(--secondary-background-color);
-            border: 2px solid var(--primary-color);
-            border-radius: 10px;
-            padding: 15px;
-            margin-top: 20px;
-            font-family: 'Courier New', Courier, monospace;
-            color: var(--text-color);
-        }
-
-        /* Image comparison width control */
-        .image-comparison-container {
-            width: 100%;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        /* Mobile responsiveness */
+        .success-box { background-color: #d4edda; border-color: #c3e6cb; color: #155724 !important; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem; }
+        .error-box { background-color: #f8d7da; border-color: #f5c6cb; color: #721c24 !important; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem; }
+        .info-box { background-color: #cce5ff; border-color: #b8daff; color: #004085 !important; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem; }
+        .warning-box { background-color: #fff3cd; border-color: #ffeeba; color: #856404 !important; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem; }
+        .result-card { background-color: var(--secondary-background-color); border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .header-container { background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%); padding: 20px; border-radius: 10px; margin-bottom: 30px; color: var(--text-color-inverse); }
+        .header-container h1, .header-container p { color: var(--text-color-inverse); }
+        .camera-container { border: 2px dashed #ccc; border-radius: 10px; padding: 15px; background-color: var(--secondary-background-color); }
+        .image-container { border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .tab-content { padding: 20px; border-radius: 0 0 10px 10px; background-color: var(--background-color); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .history-item { padding: 15px; border-radius: 8px; margin-bottom: 15px; background-color: var(--secondary-background-color); cursor: pointer; transition: all 0.3s; border-left: 5px solid var(--primary-color); }
+        .history-item:hover { filter: brightness(95%); transform: translateY(-2px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .footer { margin-top: 50px; padding: 20px; text-align: center; font-size: 0.9rem; background-color: var(--secondary-background-color); border-radius: 10px; box-shadow: 0 -2px 4px rgba(0,0,0,0.05); width: 100%; }
+        .footer a { color: var(--primary-color) !important; text-decoration: none; transition: color 0.3s; }
+        .footer a:hover { filter: brightness(85%); text-decoration: underline; }
+        .footer-content { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .camera-controls { display: flex; justify-content: center; gap: 20px; margin-top: 15px; }
+        .camera-controls .stButton>button { padding: 1rem 2rem; font-size: 1.2rem; }
+        .stProgress > div > div > div > div { background-color: var(--primary-color) !important; }
+        .input-buttons-col { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; max-width: 250px; margin-left: auto; margin-right: auto; }
+        .extracted-output { background-color: var(--secondary-background-color); border: 2px solid var(--primary-color); border-radius: 10px; padding: 15px; margin-top: 20px; font-family: 'Courier New', Courier, monospace; color: var(--text-color); }
+        .image-comparison-container { width: 100%; max-width: 600px; margin: 0 auto; }
         @media (max-width: 768px) {
             .footer { padding: 15px; font-size: 0.8rem; }
             .footer-content { flex-direction: column; gap: 8px; }
@@ -313,7 +153,6 @@ def load_extractor():
         register_crnn_path = os.path.join(script_dir, "best_crnn_model.pth")
         subject_crnn_path = os.path.join(script_dir, "best_subject_code_model.pth")
 
-        # Check for model files and create dummy files if missing (for testing)
         for p in [yolo_improved_path, yolo_fallback_path, register_crnn_path, subject_crnn_path]:
             if not os.path.exists(p):
                 st.warning(f"Model file {p} not found. Creating dummy file for testing. Replace with actual model weights for production use!")
@@ -352,7 +191,6 @@ class AnswerSheetExtractor:
             os.makedirs(os.path.join(script_dir, dir_name), exist_ok=True)
         self.script_dir = script_dir
 
-        # Robust device selection
         try:
             cuda_available = torch.cuda.is_available()
             self.device = torch.device('cuda' if cuda_available else 'cpu')
@@ -364,7 +202,6 @@ class AnswerSheetExtractor:
             st.warning(f"Error checking CUDA availability: {e}. Falling back to CPU.")
             self.device = torch.device('cpu')
 
-        # Load YOLO models
         if not os.path.exists(yolo_improved_weights_path):
             raise FileNotFoundError(f"Improved YOLO weights not found at: {yolo_improved_weights_path}")
         if not os.path.exists(yolo_fallback_weights_path):
@@ -377,7 +214,6 @@ class AnswerSheetExtractor:
         except Exception as e:
             raise RuntimeError(f"Failed to load YOLO models: {e}")
 
-        # Load Register CRNN model
         self.register_crnn_model = CRNN(num_classes=11)
         self.register_crnn_model.to(self.device)
         if not os.path.exists(register_crnn_model_path):
@@ -389,7 +225,6 @@ class AnswerSheetExtractor:
             raise RuntimeError(f"Failed to load register CRNN model: {e}")
         self.register_crnn_model.eval()
 
-        # Load Subject CRNN model
         self.subject_crnn_model = CRNN(num_classes=37)
         self.subject_crnn_model.to(self.device)
         if not os.path.exists(subject_crnn_model_path):
@@ -472,19 +307,16 @@ class AnswerSheetExtractor:
         improved_registers, improved_subjects, improved_overlay = improved_results
         fallback_registers, fallback_subjects, fallback_overlay = fallback_results
 
-        # Initialize best selections
         best_register = None
         best_subject = None
-        best_overlay = improved_overlay  # Default to improved model's overlay
+        best_overlay = improved_overlay
 
-        # Select best register number
         if improved_registers:
             best_register = max(improved_registers, key=lambda x: x[1])
         if fallback_registers and (not best_register or best_register[1] < max(fallback_registers, key=lambda x: x[1])[1]):
             best_register = max(fallback_registers, key=lambda x: x[1])
             best_overlay = fallback_overlay
 
-        # Select best subject code
         if improved_subjects:
             best_subject = max(improved_subjects, key=lambda x: x[1])
         if fallback_subjects and (not best_subject or best_subject[1] < max(fallback_subjects, key=lambda x: x[1])[1]):
@@ -524,26 +356,22 @@ class AnswerSheetExtractor:
     def process_answer_sheet(self, image_path):
         st.session_state.processing_start_time = time.time()
 
-        # Step 1: Try improved model
         with st.spinner("Detecting regions with improved model..."):
             improved_results = self.detect_regions(image_path, self.yolo_improved_model, "improved")
             improved_registers, improved_subjects, improved_overlay = improved_results
 
-        # Step 2: If either register or subject is not detected, try fallback model
         if not (improved_registers and improved_subjects):
             with st.spinner("Detecting regions with fallback model..."):
                 fallback_results = self.detect_regions(image_path, self.yolo_fallback_model, "fallback")
         else:
-            fallback_results = ([], [], None)  # No need for fallback if both detected
+            fallback_results = ([], [], None)
 
-        # Step 3: Select best detections
         best_register, best_subject, best_overlay = self.select_best_detections(improved_results, fallback_results)
 
         results = []
         best_register_cropped_path = best_register[0] if best_register else None
         best_subject_cropped_path = best_subject[0] if best_subject else None
 
-        # Step 4: Proceed with extraction for the best detections
         if best_register:
             with st.spinner("Extracting Register Number..."):
                 register_number = self.extract_register_number(best_register_cropped_path)
@@ -596,7 +424,7 @@ class VideoProcessor:
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
         current_time = time.time()
         img = frame.to_ndarray(format="bgr24")
-        self.frame = img  # Always update frame to ensure it's not None
+        self.frame = img
         self.last_processed = current_time
         self.frame_count += 1
         if current_time - self.last_frame_time >= 1.0:
@@ -670,6 +498,20 @@ def save_results_to_file(results, filename_prefix="results"):
     except Exception as e:
         st_error(f"Failed to save results to {filepath}: {e}")
         return None
+
+# Fallback text extraction using PyPDF2
+def fallback_extract_text(pdf_file):
+    try:
+        pdf_file.seek(0)  # Reset stream
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        if len(pdf_reader.pages) > 0:
+            page = pdf_reader.pages[0]
+            text = page.extract_text() or ""
+            return text.strip()
+        return "No text extracted"
+    except Exception as e:
+        logger.error(f"Fallback text extraction failed: {e}")
+        return f"Text extraction error: {e}"
 
 # Main app
 def main():
@@ -750,9 +592,19 @@ def main():
                     temp_path = os.path.join(uploads_dir, f"image_{uuid.uuid4().hex}.jpg")
 
                     try:
+                        # Validate file size
+                        file_size = uploaded_file.size / (1024 * 1024)  # Size in MB
+                        logger.info(f"Uploaded file: {uploaded_file.name}, Size: {file_size:.2f} MB")
+                        if file_size > 50:  # Arbitrary limit to prevent memory issues
+                            st_error("File size exceeds 50MB. Please upload a smaller file.")
+                            st.session_state.image_path = None
+                            st.session_state.image_captured = False
+                            st.rerun()
+
                         if file_extension == 'pdf':
                             # Read PDF to check page count
-                            pdf_reader = PyPDF2.PdfReader(uploaded_file)
+                            pdf_file = io.BytesIO(uploaded_file.getvalue())
+                            pdf_reader = PyPDF2.PdfReader(pdf_file)
                             num_pages = len(pdf_reader.pages)
                             if num_pages == 0:
                                 st_error("The uploaded PDF is empty.")
@@ -763,22 +615,34 @@ def main():
                                 st_info(f"PDF uploaded with {num_pages} page(s). Processing the first page by default.")
                                 # Convert the first page to an image using pypdfium2
                                 try:
-                                    pdf_bytes = uploaded_file.read()
-                                    pdf = pdfium.PdfDocument(pdf_bytes)
-                                    page = pdf[0]  # Get the first page
+                                    pdf_file.seek(0)  # Reset stream
+                                    pdf = pdfium.PdfDocument(pdf_file)
+                                    if len(pdf) == 0:
+                                        raise Exception("PDF has no pages.")
+                                    page = pdf[0]
                                     pil_image = page.render(scale=300/72).to_pil()  # Render at 300 DPI
                                     pil_image.save(temp_path, 'JPEG')
                                     page.close()
                                     pdf.close()
+                                    logger.info(f"PDF page converted to image: {temp_path}")
                                 except Exception as e:
+                                    logger.error(f"pypdfium2 error: {e}")
                                     st_error(f"Error converting PDF to image: {e}")
+                                    st_warning("The PDF may be corrupted or in an unsupported format. Trying fallback text extraction...")
+                                    pdf_file.seek(0)
+                                    fallback_text = fallback_extract_text(pdf_file)
+                                    st.markdown('<div class="extracted-output">', unsafe_allow_html=True)
+                                    st.markdown(f"**Fallback Extracted Text (First Page):** `{fallback_text}`")
+                                    st.markdown('</div>', unsafe_allow_html=True)
+                                    st_info("Note: Fallback text extraction may not detect register numbers or subject codes accurately, as it bypasses image-based processing. Please upload a valid PDF or image.")
                                     st.session_state.image_path = None
                                     st.session_state.image_captured = False
                                     st.rerun()
                         else:
-                            # Handle image files (PNG, JPG, JPEG)
+                            # Handle image files
                             with open(temp_path, "wb") as f:
                                 f.write(uploaded_file.getbuffer())
+                            logger.info(f"Image saved: {temp_path}")
 
                         if os.path.exists(temp_path):
                             st.session_state.image_path = temp_path
@@ -792,6 +656,7 @@ def main():
                             st.session_state.image_path = None
                             st.session_state.image_captured = False
                     except Exception as e:
+                        logger.error(f"Error processing uploaded file: {e}")
                         st_error(f"Error processing uploaded file: {e}")
                         st.session_state.image_path = None
                         st.session_state.image_captured = False
@@ -1059,7 +924,7 @@ def main():
                 <li><b>Object Detection:</b> A custom-trained YOLOv8 model identifies the locations of the relevant fields (Register Number, Subject Code) on the sheet.</li>
                 <li><b>Text Recognition (OCR):</b> Convolutional Recurrent Neural Network (CRNN) models are employed to read the characters within the detected regions. Separate CRNN models are optimized for recognizing digits (Register Number) and alphanumeric characters (Subject Code).</li>
                 <li><b>Web Interface:</b> Built with Streamlit, providing an interactive user interface for image upload, camera capture, and results visualization.</li>
-                <li><b>PDF Processing:</b> Supports PDF uploads with automatic conversion of the first page to an image using PyPDF2 and pypdfium2.</li>
+                <li><b>PDF Processing:</b> Supports PDF uploads with automatic conversion of the first page to an image using PyPDF2 and pypdfium2, with fallback text extraction for invalid PDFs.</li>
             </ul>
             """, unsafe_allow_html=True)
 
@@ -1084,7 +949,7 @@ def main():
             <li>The models require specific weights files (<code>improved_weights.pt</code>, <code>weights.pt</code>, <code>best_crnn_model.pth</code>, <code>best_subject_code_model.pth</code>) to be present in the same directory as the script.</li>
             <li>Accuracy is dependent on the quality of the input image (clarity, lighting, angle) and the training data used for the models.</li>
             <li>If model files are missing, dummy files are created for testing. Replace them with trained model weights for production use.</li>
-            <li>PDF processing uses <code>pypdfium2</code>, which is compatible with cloud deployments like Streamlit Cloud without requiring external system dependencies.</li>
+            <li>PDF processing uses <code>pypdfium2</code> for image conversion, which is compatible with cloud deployments like Streamlit Cloud. If a PDF is invalid, a fallback text extraction using <code>PyPDF2</code> is attempted.</li>
         </ul>
         """, unsafe_allow_html=True)
 
