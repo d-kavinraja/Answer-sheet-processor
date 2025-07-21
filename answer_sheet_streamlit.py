@@ -155,7 +155,7 @@ def load_extractor():
         # Check for model files
         model_files = [yolo_improved_path, yolo_fallback_path, register_crnn_path, subject_crnn_path]
         for p in model_files:
-            if notf not os.path.exists(p):
+            if not os.path.exists(p):
                 st.warning(f"Model file {p} not found. Please ensure model weights are included in the 'models' directory.")
                 return None
 
