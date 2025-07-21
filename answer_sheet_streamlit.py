@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import os
 import torch
@@ -1103,4 +1102,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
