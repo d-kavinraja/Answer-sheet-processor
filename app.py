@@ -33,12 +33,9 @@ def main():
         logger.debug("Loading secrets")
         secrets = load_secrets()
         
-        # Initialize MongoDB
-        logger.debug("Initializing MongoManager")
+        # Initialize MongoDB and EmailService
+        logger.debug("Initializing MongoManager and EmailService")
         mongo_manager = MongoManager(secrets["MONGO_URI"])
-        
-        # Initialize EmailService
-        logger.debug("Initializing EmailService")
         email_service = EmailService(
             secrets["SMTP_SERVER"],
             secrets["SMTP_PORT"],
@@ -50,7 +47,7 @@ def main():
         logger.debug("Initializing session state")
         initialize_session_state()
         
-        # Load CSS and header
+        # Apply CSS and display header
         logger.debug("Applying CSS and displaying header")
         local_css()
         display_header()
@@ -64,6 +61,7 @@ def main():
                 icons=["box-arrow-in-right", "person-plus"],
                 default_index=0 if st.session_state.auth_tab == "Sign In" else 1,
                 orientation="horizontal",
+                key="auth_menu",
                 styles={
                     "container": {"padding": "0!important", "background-color": "#f8f9fa", "border-radius": "8px"},
                     "icon": {"color": "#2E86AB", "font-size": "16px"},
@@ -77,6 +75,7 @@ def main():
                     "nav-link-selected": {"background-color": "#2E86AB", "color": "#fff"}
                 }
             )
+            st.session_state.auth_tab = auth_tabs
             if auth_tabs == "Sign Up":
                 logger.debug("Displaying signup UI")
                 display_signup(mongo_manager, email_service)
@@ -93,6 +92,7 @@ def main():
             icons=["camera", "clock-history", "info-circle"],
             default_index=0,
             orientation="horizontal",
+            key="main_menu",
             styles={
                 "container": {"padding": "0!important", "background-color": "#f8f9fa", "border-radius": "8px"},
                 "icon": {"color": "#2E86AB", "font-size": "16px"},
