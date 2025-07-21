@@ -1,7 +1,11 @@
 import streamlit as st
+import logging
+
+logger = logging.getLogger(__name__)
 
 def initialize_session_state():
     """Initialize Streamlit session state variables."""
+    logger.debug("Initializing session state variables")
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
     if "email" not in st.session_state:
