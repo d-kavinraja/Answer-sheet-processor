@@ -15,7 +15,6 @@ from streamlit_option_menu import option_menu
 from streamlit_image_comparison import image_comparison
 from datetime import datetime
 import json
-from pdf2image import convert_from_bytes
 
 # Set page configuration
 st.set_page_config(
