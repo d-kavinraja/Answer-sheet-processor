@@ -74,6 +74,7 @@ def display_signup(mongo_manager, email_service):
                     email_service.send_otp(email, otp)
                     st.session_state.auth_tab = "Sign In"
                     st.session_state.signup_email = email
+                    st.session_state.pending_verification = True
                     st_success("Account created! Check your email for the OTP to verify.")
                 else:
                     st_error("Username or email already exists.")
@@ -83,29 +84,53 @@ def display_signup(mongo_manager, email_service):
             st_warning("Please fill in all fields.")
 
 def display_signin(mongo_manager, email_service):
-    """Display the signin form."""
+    """Display the signin form with OTP verification."""
     st.subheader("Sign In")
     email = st.text_input("Email", key="signin_email")
     password = st.text_input("Password", type="password", key="signin_password")
-    if st.button("Sign In"):
-        if email and password:
-            user = mongo_manager.verify_user(email, password)
-            if user:
-                if user.get("verified", False):
-                    st.session_state.logged_in = True
-                    st.session_state.email = email
-                    st_success("Successfully signed in!")
-                    st.experimental_rerun()
-                else:
-                    otp = email_service.generate_otp()
-                    mongo_manager.save_otp(email, otp)
-                    email_service.send_otp(email, otp)
-                    st.session_state.signup_email = email
-                    st_info("Please verify your email with the OTP sent.")
+    
+    if "pending_verification" in st.session_state and st.session_state.pending_verification:
+        st.subheader("Verify Your Email")
+        otp = st.text_input("Enter OTP", key="otp_input")
+        if st.button("Verify OTP"):
+            if otp:
+                try:
+                    if mongo_manager.verify_otp(email, otp):
+                        st.session_state.logged_in = True
+                        st.session_state.email = email
+                        st.session_state.pending_verification = False
+                        st_success("Email verified successfully! You are now logged in.")
+                        st.experimental_rerun()
+                    else:
+                        st_error("Invalid OTP. Please try again.")
+                except Exception as e:
+                    st_error(f"Error verifying OTP: {str(e)}")
             else:
-                st_error("Invalid email or password.")
-        else:
-            st_warning("Please fill in all fields.")
+                st_warning("Please enter the OTP.")
+    else:
+        if st.button("Sign In"):
+            if email and password:
+                try:
+                    user = mongo_manager.verify_user(email, password)
+                    if user:
+                        if user.get("verified", False):
+                            st.session_state.logged_in = True
+                            st.session_state.email = email
+                            st_success("Successfully signed in!")
+                            st.experimental_rerun()
+                        else:
+                            otp = email_service.generate_otp()
+                            mongo_manager.save_otp(email, otp)
+                            email_service.send_otp(email, otp)
+                            st.session_state.signup_email = email
+                            st.session_state.pending_verification = True
+                            st_info("Please verify your email with the OTP sent.")
+                    else:
+                        st_error("Invalid email or password.")
+                except Exception as e:
+                    st_error(f"Error during signin: {str(e)}")
+            else:
+                st_warning("Please fill in all fields.")
 
 def display_scan_tab(extractor, mongo_manager):
     """Display the scan tab with upload and camera options."""
