@@ -17,6 +17,15 @@ from datetime import datetime
 import json
 import PyPDF2
 from pdf2image import convert_from_bytes
+import pypdfium2 as pdfium
+def convert_pdf_to_image(pdf_file):
+    pdf = pdfium.PdfDocument(pdf_file)
+    page = pdf[0]  # Get the first page
+    pil_image = page.render(scale=300/72).to_pil()  # Convert to PIL Image
+    temp_path = os.path.join(script_dir, "uploads", f"image_{uuid.uuid4().hex}.jpg")
+    pil_image.save(temp_path, 'JPEG')
+    return temp_path
+
 
 # Set page configuration
 st.set_page_config(
@@ -736,69 +745,73 @@ def main():
 
         if st.session_state.input_method == "Upload Image":
             with st.container():
-                st.markdown('<div class="camera-container">', unsafe_allow_html=True)
-                uploaded_file = st.file_uploader(
-                    "Upload Answer Sheet Image or PDF",
-                    type=["png", "jpg", "jpeg", "pdf"],
-                    key="uploader",
-                    label_visibility="collapsed"
-                )
-                if uploaded_file:
-                    file_extension = uploaded_file.name.split('.')[-1].lower()
-                    uploads_dir = os.path.join(script_dir, "uploads")
-                    os.makedirs(uploads_dir, exist_ok=True)
-                    temp_path = os.path.join(uploads_dir, f"image_{uuid.uuid4().hex}.jpg")
-
-                    try:
-                        if file_extension == 'pdf':
-                            # Read PDF and select the first page by default
-                            pdf_reader = PyPDF2.PdfReader(uploaded_file)
-                            num_pages = len(pdf_reader.pages)
-                            if num_pages == 0:
-                                st_error("The uploaded PDF is empty.")
+            st.markdown('<div class="camera-container">', unsafe_allow_html=True)
+            uploaded_file = st.file_uploader(
+                "Upload Answer Sheet Image or PDF",
+                type=["png", "jpg", "jpeg", "pdf"],
+                key="uploader",
+                label_visibility="collapsed"
+            )
+            if uploaded_file:
+                file_extension = uploaded_file.name.split('.')[-1].lower()
+                uploads_dir = os.path.join(script_dir, "uploads")
+                os.makedirs(uploads_dir, exist_ok=True)
+                temp_path = os.path.join(uploads_dir, f"image_{uuid.uuid4().hex}.jpg")
+    
+                try:
+                    if file_extension == 'pdf':
+                        # Read PDF and select the first page by default
+                        pdf_reader = PyPDF2.PdfReader(uploaded_file)
+                        num_pages = len(pdf_reader.pages)
+                        if num_pages == 0:
+                            st_error("The uploaded PDF is empty.")
+                            st.session_state.image_path = None
+                            st.session_state.image_captured = False
+                            st.rerun()
+                        else:
+                            st_info(f"PDF uploaded with {num_pages} page(s). Processing the first page by default.")
+                            # Convert the first page to an image
+                            try:
+                                pdf_bytes = uploaded_file.read()
+                                images = convert_from_bytes(pdf_bytes, first_page=1, last_page=1, dpi=300)
+                                if not images:
+                                    raise Exception("Failed to convert PDF page to image.")
+                                # Save the converted image
+                                images[0].save(temp_path, 'JPEG')
+                            except Exception as e:
+                                st_error(f"Error converting PDF to image: {e}")
+                                st_warning("This error may occur if poppler-utils is not installed or not in PATH. For Streamlit Cloud, ensure 'poppler-utils' is in packages.txt. For local use, install poppler-utils (e.g., 'apt-get install poppler-utils' on Ubuntu or 'brew install poppler' on macOS).")
                                 st.session_state.image_path = None
                                 st.session_state.image_captured = False
                                 st.rerun()
-                            else:
-                                st_info(f"PDF uploaded with {num_pages} page(s). Processing the first page by default.")
-                                # Convert the first page to an image
-                                pdf_bytes = uploaded_file.read()
-                                images = convert_from_bytes(pdf_bytes, first_page=1, last_page=1)
-                                if not images:
-                                    st_error("Failed to convert PDF page to image.")
-                                    st.session_state.image_path = None
-                                    st.session_state.image_captured = False
-                                    st.rerun()
-                                # Save the converted image
-                                images[0].save(temp_path, 'JPEG')
-                        else:
-                            # Handle image files (PNG, JPG, JPEG)
-                            with open(temp_path, "wb") as f:
-                                f.write(uploaded_file.getbuffer())
-
-                        if os.path.exists(temp_path):
-                            st.session_state.image_path = temp_path
-                            st.session_state.image_captured = True
-                            st.session_state.selected_history_item_index = None
-                            st.markdown('<div class="image-container">', unsafe_allow_html=True)
-                            st.image(st.session_state.image_path, caption="Uploaded Image" if file_extension != 'pdf' else "Converted PDF Page", use_container_width=True)
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        else:
-                            st_error("Failed to save the uploaded file.")
-                            st.session_state.image_path = None
-                            st.session_state.image_captured = False
-                    except Exception as e:
-                        st_error(f"Error processing uploaded file: {e}")
+                    else:
+                        # Handle image files (PNG, JPG, JPEG)
+                        with open(temp_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+    
+                    if os.path.exists(temp_path):
+                        st.session_state.image_path = temp_path
+                        st.session_state.image_captured = True
+                        st.session_state.selected_history_item_index = None
+                        st.markdown('<div class="image-container">', unsafe_allow_html=True)
+                        st.image(st.session_state.image_path, caption="Uploaded Image" if file_extension != 'pdf' else "Converted PDF Page", use_container_width=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    else:
+                        st_error("Failed to save the uploaded file.")
                         st.session_state.image_path = None
                         st.session_state.image_captured = False
-                elif not st.session_state.image_path or not st.session_state.image_captured:
-                    st.markdown("""
-                    <div style="border: 2px dashed #ccc; border-radius: 5px; padding: 40px 20px; margin-top: 10px;">
-                        <h3>Drag & drop or click to upload</h3>
-                        <p>Supported formats: JPG, PNG, JPEG, PDF (first page will be processed)</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st_error(f"Error processing uploaded file: {e}")
+                    st.session_state.image_path = None
+                    st.session_state.image_captured = False
+            elif not st.session_state.image_path or not st.session_state.image_captured:
+                st.markdown("""
+                <div style="border: 2px dashed #ccc; border-radius: 5px; padding: 40px 20px; margin-top: 10px;">
+                    <h3>Drag & drop or click to upload</h3>
+                    <p>Supported formats: JPG, PNG, JPEG, PDF (first page will be processed)</p>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
         else:  # Use Camera
             with st.container():
