@@ -91,7 +91,7 @@ def display_signup(mongo_manager, email_service):
                     st_success("Account created! Check your email for the OTP to verify.")
                     
                     # Rerun the script to switch to the Sign In tab and show the OTP input
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     logger.warning("Username or email already exists")
                     st_error("Username or email already exists.")
