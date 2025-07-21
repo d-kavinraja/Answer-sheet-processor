@@ -59,23 +59,31 @@ class MongoManager:
         except Exception as e:
             logger.error(f"Error saving OTP: {str(e)}")
 
-    def verify_otp(self, email: str, otp: str) -> bool:
-        """Verify OTP and mark user as verified."""
+    # New version in database.py
+    def verify_otp(self, email: str, otp: str) -> dict: # Return type changed to dict
+        """Verify OTP and return the user object on success."""
         logger.debug(f"Verifying OTP for {email}")
         try:
             user = self.users.find_one({"email": email, "otp": otp})
             if user:
+                # Check if OTP has expired (e.g., 10 minutes)
+                otp_timestamp = user.get("otp_timestamp", datetime.min)
+                if (datetime.utcnow() - otp_timestamp).total_seconds() > 600:
+                    logger.warning(f"Expired OTP attempt for {email}")
+                    return None # OTP expired
+
                 self.users.update_one(
                     {"email": email},
                     {"$set": {"verified": True}, "$unset": {"otp": "", "otp_timestamp": ""}}
                 )
                 logger.debug("OTP verified, user marked as verified")
-                return True
+                return user # Return user object on success
             logger.warning("Invalid OTP")
-            return False
+            return None # Return None on failure
         except Exception as e:
             logger.error(f"Error verifying OTP: {str(e)}")
-            return False
+            return None
+
 
     def save_scan(self, email: str, image_path: str, results: list):
         """Save scan results to the database."""
