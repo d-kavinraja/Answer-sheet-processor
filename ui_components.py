@@ -4,7 +4,6 @@ from video_processor import VideoProcessor
 from utils import st_success, st_error, st_info, st_warning, get_image_download_button, save_results_to_file
 import os
 from datetime import datetime
-import base64
 import logging
 
 logger = logging.getLogger(__name__)
@@ -66,9 +65,9 @@ def display_signup(mongo_manager, email_service):
     """Display the signup form."""
     logger.debug("Rendering signup form")
     st.subheader("Create an Account")
-    username = st.text_input("Username")
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
+    username = st.text_input("Username", key="signup_username")
+    email = st.text_input("Email", key="signup_email")
+    password = st.text_input("Password", type="password", key="signup_password")
     if st.button("Sign Up"):
         logger.debug(f"Signup attempt: username={username}, email={email}")
         if username and email and password:
@@ -83,7 +82,7 @@ def display_signup(mongo_manager, email_service):
                     st.session_state.signup_email = email
                     st.session_state.pending_verification = True
                     logger.debug(f"Signup successful, OTP sent to {email}")
-                    st_success("Account created! Check your email for the OTP to verify.")
+                    st_success("Account created! Check your email for the OTP to verify. Please switch to the Sign In tab to enter your OTP.")
                 else:
                     logger.warning("Username or email already exists")
                     st_error("Username or email already exists.")
@@ -97,14 +96,14 @@ def display_signup(mongo_manager, email_service):
 def display_signin(mongo_manager, email_service):
     """Display the signin form with OTP verification."""
     logger.debug("Rendering signin form")
-    st.subheader("Sign In")
     email = st.text_input("Email", key="signin_email", value=st.session_state.get("signup_email", ""))
     
-    if "pending_verification" in st.session_state and st.session_state.pending_verification:
+    if st.session_state.get("pending_verification", False):
         logger.debug(f"Displaying OTP verification for email: {email}")
         st.subheader("Verify Your Email")
+        st.markdown(f"Enter the OTP sent to {email}")
         otp = st.text_input("Enter OTP", key="otp_input")
-        if st.button("Verify OTP"):
+        if st.button("Verify OTP", key="verify_otp_button"):
             logger.debug(f"Verifying OTP for email: {email}, OTP: {otp}")
             if otp:
                 try:
@@ -125,8 +124,10 @@ def display_signin(mongo_manager, email_service):
                 logger.warning("OTP field empty")
                 st_warning("Please enter the OTP.")
     else:
+        logger.debug("Displaying signin form for password")
+        st.subheader("Sign In")
         password = st.text_input("Password", type="password", key="signin_password")
-        if st.button("Sign In"):
+        if st.button("Sign In", key="signin_button"):
             logger.debug(f"Signin attempt: email={email}")
             if email and password:
                 try:
@@ -259,6 +260,6 @@ def display_about_tab():
     - Save scan history to MongoDB Atlas.
     - User authentication with email verification.
     
-    **Developed by:** Your Name
+    **Developed by:** Kavin Raja
     **Version:** 1.0.0
     """)
