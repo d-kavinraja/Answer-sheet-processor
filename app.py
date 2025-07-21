@@ -3,23 +3,23 @@ from config import load_secrets
 from database import MongoManager
 from services import EmailService
 from session_state import initialize_session_state
-from ui_components import local_css, display_header, display_signup, display_signin, display_scan_tab, display_history_tab, display_about_tab
+from ui_components import (local_css, display_header, display_signup, 
+                           display_signin, display_scan_tab, display_history_tab, 
+                           display_about_tab)
 from extractor import load_extractor
 from streamlit_option_menu import option_menu
 import logging
 import sys
 
-# Set up logging
+# Set up logging for debugging
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
 )
-
 logger = logging.getLogger(__name__)
 
 # Set page configuration
-logger.debug("Setting Streamlit page configuration")
 st.set_page_config(
     page_title="Smart Answer Sheet Scanner",
     page_icon="📝",
@@ -28,18 +28,13 @@ st.set_page_config(
 )
 
 def main():
-    """
-    The main function that runs the Streamlit application.
-    It handles initialization, user authentication, and tab navigation.
-    """
+    """Main function to run the Streamlit application."""
     logger.debug("Entering main() function")
     try:
         # Load secrets from config
-        logger.debug("Loading secrets")
         secrets = load_secrets()
 
-        # Initialize MongoDB and EmailService
-        logger.debug("Initializing MongoManager and EmailService")
+        # Initialize core services
         mongo_manager = MongoManager(secrets["MONGO_URI"])
         email_service = EmailService(
             secrets["SMTP_SERVER"],
@@ -48,89 +43,65 @@ def main():
             secrets["EMAIL_PASSWORD"]
         )
 
-        # Initialize session state for user data
-        logger.debug("Initializing session state")
+        # Initialize session state
         initialize_session_state()
 
-        # Apply CSS and display the main header
-        logger.debug("Applying CSS and displaying header")
+        # Apply custom CSS and display header
         local_css()
         display_header()
 
-        # Authentication flow: show sign-in/sign-up if not logged in
-        if not st.session_state.logged_in:
-            logger.debug("Displaying authentication tabs")
+        # Authentication Flow: Show sign-in/sign-up if not logged in
+        if not st.session_state.get("logged_in", False):
             auth_tabs = option_menu(
                 menu_title=None,
                 options=["Sign In", "Sign Up"],
                 icons=["box-arrow-in-right", "person-plus"],
                 default_index=0 if st.session_state.auth_tab == "Sign In" else 1,
                 orientation="horizontal",
-                key="auth_menu",
                 styles={
                     "container": {"padding": "0!important", "background-color": "#f8f9fa", "border-radius": "8px"},
                     "icon": {"color": "#2E86AB", "font-size": "16px"},
-                    "nav-link": {
-                        "font-size": "16px",
-                        "text-align": "center",
-                        "margin": "0px",
-                        "padding": "10px",
-                        "color": "#333"
-                    },
+                    "nav-link": {"font-size": "16px", "text-align": "center", "margin": "0px", "color": "#333"},
                     "nav-link-selected": {"background-color": "#2E86AB", "color": "#fff"}
                 }
             )
             st.session_state.auth_tab = auth_tabs
 
             if auth_tabs == "Sign Up":
-                logger.debug("Displaying signup UI")
                 display_signup(mongo_manager, email_service)
             else:
-                logger.debug("Displaying signin UI")
                 display_signin(mongo_manager, email_service)
             return
 
-        # Main app tabs for logged-in users
-        logger.debug("Displaying main app tabs")
+        # Main App for Logged-in Users
         selected_tab = option_menu(
             menu_title=None,
             options=["Scan", "History", "About"],
             icons=["camera", "clock-history", "info-circle"],
             default_index=0,
             orientation="horizontal",
-            key="main_menu",
             styles={
                 "container": {"padding": "0!important", "background-color": "#f8f9fa", "border-radius": "8px"},
                 "icon": {"color": "#2E86AB", "font-size": "16px"},
-                "nav-link": {
-                    "font-size": "16px",
-                    "text-align": "center",
-                    "margin": "0px",
-                    "padding": "10px",
-                    "color": "#333"
-                },
+                "nav-link": {"font-size": "16px", "text-align": "center", "margin": "0px", "color": "#333"},
                 "nav-link-selected": {"background-color": "#2E86AB", "color": "#fff"}
             }
         )
 
-        # Load the ML model extractor
-        logger.debug("Loading extractor")
+        # Lazily load the ML model extractor only when needed
         extractor = load_extractor()
 
         # Display content based on the selected tab
         if selected_tab == "Scan":
-            logger.debug("Displaying scan tab")
             display_scan_tab(extractor, mongo_manager)
         elif selected_tab == "History":
-            logger.debug("Displaying history tab")
             display_history_tab(mongo_manager)
         else:
-            logger.debug("Displaying about tab")
             display_about_tab()
 
     except Exception as e:
-        logger.error(f"Error in main: {str(e)}")
-        st.error(f"An error occurred: {str(e)}")
+        logger.error(f"Critical error in main app execution: {str(e)}", exc_info=True)
+        st.error(f"A critical error occurred. Please check the logs or contact support.")
 
 if __name__ == "__main__":
     main()

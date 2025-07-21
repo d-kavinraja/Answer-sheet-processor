@@ -1,110 +1,65 @@
 from pymongo import MongoClient
 import bcrypt
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
 
 class MongoManager:
     def __init__(self, mongo_uri: str):
-        """Initialize MongoDB connection."""
-        logger.debug("Initializing MongoManager")
         self.client = MongoClient(mongo_uri)
         self.db = self.client["answer_sheet_scanner"]
         self.users = self.db["users"]
         self.scans = self.db["scans"]
+        self.users.create_index("email", unique=True)
 
     def create_user(self, user_data: dict) -> bool:
-        """Create a new user with hashed password."""
-        logger.debug(f"Creating user: {user_data['username']}")
+        """Create a new user with a hashed password."""
         try:
-            # Check if username or email already exists
-            if self.users.find_one({"$or": [{"username": user_data["username"]}, {"email": user_data["email"]}]}):
+            if self.users.find_one({"email": user_data["email"]}):
                 return False
-            # Hash password
             hashed_password = bcrypt.hashpw(user_data["password"].encode("utf-8"), bcrypt.gensalt())
             user_data["password"] = hashed_password
             user_data["created_at"] = datetime.utcnow()
+            user_data["verified"] = False
             self.users.insert_one(user_data)
-            logger.debug("User created successfully")
             return True
         except Exception as e:
-            logger.error(f"Error creating user: {str(e)}")
+            logger.error(f"Error creating user: {e}")
             return False
 
     def verify_user(self, email: str, password: str) -> dict:
-        """Verify user credentials and return user data."""
-        logger.debug(f"Verifying user: {email}")
-        try:
-            user = self.users.find_one({"email": email})
-            if user and bcrypt.checkpw(password.encode("utf-8"), user["password"]):
-                logger.debug("User verified successfully")
-                return user
-            logger.warning("Invalid email or password")
-            return None
-        except Exception as e:
-            logger.error(f"Error verifying user: {str(e)}")
-            return None
+        """Verify user credentials and return user data if valid."""
+        user = self.users.find_one({"email": email})
+        if user and bcrypt.checkpw(password.encode("utf-8"), user["password"]):
+            return user
+        return None
 
     def save_otp(self, email: str, otp: str):
-        """Save OTP for email verification."""
-        logger.debug(f"Saving OTP for {email}")
-        try:
-            self.users.update_one(
-                {"email": email},
-                {"$set": {"otp": otp, "otp_timestamp": datetime.utcnow()}},
-                upsert=True
-            )
-            logger.debug("OTP saved successfully")
-        except Exception as e:
-            logger.error(f"Error saving OTP: {str(e)}")
+        """Save OTP and its timestamp for a user."""
+        self.users.update_one(
+            {"email": email},
+            {"$set": {"otp": otp, "otp_timestamp": datetime.utcnow()}}
+        )
 
-    # New version in database.py
-    def verify_otp(self, email: str, otp: str) -> dict: # Return type changed to dict
-        """Verify OTP and return the user object on success."""
-        logger.debug(f"Verifying OTP for {email}")
-        try:
-            user = self.users.find_one({"email": email, "otp": otp})
-            if user:
-                # Check if OTP has expired (e.g., 10 minutes)
-                otp_timestamp = user.get("otp_timestamp", datetime.min)
-                if (datetime.utcnow() - otp_timestamp).total_seconds() > 600:
-                    logger.warning(f"Expired OTP attempt for {email}")
-                    return None # OTP expired
-
+    def verify_otp(self, email: str, otp: str) -> dict:
+        """Verify OTP. If valid and not expired, mark user as verified and return user."""
+        user = self.users.find_one({"email": email, "otp": otp})
+        if user:
+            otp_time = user.get("otp_timestamp", datetime.min)
+            if (datetime.utcnow() - otp_time) < timedelta(minutes=10):
                 self.users.update_one(
                     {"email": email},
                     {"$set": {"verified": True}, "$unset": {"otp": "", "otp_timestamp": ""}}
                 )
-                logger.debug("OTP verified, user marked as verified")
-                return user # Return user object on success
-            logger.warning("Invalid OTP")
-            return None # Return None on failure
-        except Exception as e:
-            logger.error(f"Error verifying OTP: {str(e)}")
-            return None
+                return user
+        return None
 
-
-    def save_scan(self, email: str, image_path: str, results: list):
-        """Save scan results to the database."""
-        logger.debug(f"Saving scan for {email}")
-        try:
-            scan_data = {
-                "email": email,
-                "image_path": image_path,
-                "results": results,
-                "timestamp": datetime.utcnow()
-            }
-            self.scans.insert_one(scan_data)
-            logger.debug("Scan saved successfully")
-        except Exception as e:
-            logger.error(f"Error saving scan: {str(e)}")
+    def save_scan(self, email: str, history_item: dict):
+        """Save a complete scan result (history item) to the database."""
+        scan_data = {"email": email, "history_item": history_item}
+        self.scans.insert_one(scan_data)
 
     def get_user_scans(self, email: str) -> list:
-        """Retrieve all scans for a user."""
-        logger.debug(f"Retrieving scans for {email}")
-        try:
-            return list(self.scans.find({"email": email}).sort("timestamp", -1))
-        except Exception as e:
-            logger.error(f"Error retrieving scans: {str(e)}")
-            return []
+        """Retrieve all scans for a user, sorted by date."""
+        return list(self.scans.find({"email": email}).sort("history_item.timestamp", -1))
