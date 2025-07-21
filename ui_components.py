@@ -83,6 +83,8 @@ def display_signup(mongo_manager, email_service):
                     st.session_state.pending_verification = True
                     logger.debug(f"Signup successful, OTP sent to {email}")
                     st_success("Account created! Check your email for the OTP to verify. Please switch to the Sign In tab to enter your OTP.")
+
+                    st.experimental_rerun() 
                 else:
                     logger.warning("Username or email already exists")
                     st_error("Username or email already exists.")
