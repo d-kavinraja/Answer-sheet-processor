@@ -10,3 +10,4 @@ av
 numpy
 pillow
 streamlit-option-menu
+poppler-utils
