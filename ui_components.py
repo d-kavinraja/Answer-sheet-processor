@@ -122,7 +122,7 @@ def display_signin(mongo_manager, email_service):
                         st.session_state.pending_verification = False
                         logger.debug("OTP verified, user logged in")
                         st_success("Email verified successfully! You are now logged in.")
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         logger.warning("Invalid OTP")
                         st_error("Invalid OTP. Please try again.")
@@ -147,7 +147,7 @@ def display_signin(mongo_manager, email_service):
                             st.session_state.email = email
                             logger.debug("User signed in successfully")
                             st_success("Successfully signed in!")
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             otp = email_service.generate_otp()
                             mongo_manager.save_otp(email, otp)
