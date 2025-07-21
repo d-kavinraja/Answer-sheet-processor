@@ -6,6 +6,7 @@ ultralytics
 torch
 torchvision
 pdf2image
+libgl1
 numpy
 Pillow
 streamlit-option-menu
