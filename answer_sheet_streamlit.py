@@ -151,7 +151,7 @@ def load_extractor():
         yolo_improved_path = os.path.join(script_dir, "improved_weights.pt")
         yolo_fallback_path = os.path.join(script_dir, "weights.pt")
         register_crnn_path = os.path.join(script_dir, "best_crnn_model.pth")
-        subject_crnn_path = os.path.join(script_dir, "best_subject_code_model.pth")
+        subject_crnn_path = os.path.join(script_dir, "best_subject_code_model_fulldataset.pth")
 
         for p in [yolo_improved_path, yolo_fallback_path, register_crnn_path, subject_crnn_path]:
             if not os.path.exists(p):
